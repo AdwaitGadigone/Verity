@@ -329,18 +329,46 @@
          LOADING SECTION
         ═══════════════════════════════════════════════════════ -->
         <section id="loading-section" class="loading-section" style="display:none" aria-live="polite">
-            <div class="container">
-                <div class="loader-ring"></div>
+            <div class="loading-inner">
+
+                <!-- Multi-ring spinner -->
+                <div class="loading-rings">
+                    <div class="lr-outer"></div>
+                    <div class="lr-middle"></div>
+                    <div class="lr-core">&#128269;</div>
+                </div>
+
                 <h2 class="loading-title">Analyzing&hellip;</h2>
                 <p class="loading-subtitle">Running 6 independent checks + AI scoring</p>
-                <ul id="loading-checklist" class="loading-checklist">
-                    <li id="lc-domain" class="lc-item">&#128193; Checking domain &amp; publisher credibility</li>
-                    <li id="lc-emotional" class="lc-item">&#128172; Analyzing emotional language &amp; clickbait</li>
-                    <li id="lc-factual" class="lc-item">&#128269; Verifying facts with Gemini AI</li>
-                    <li id="lc-author" class="lc-item">&#9997; Checking author &amp; source transparency</li>
-                    <li id="lc-content" class="lc-item">&#128196; Assessing content integrity</li>
-                    <li id="lc-mdm" class="lc-item">&#127464;&#127462; Classifying under MDM framework</li>
-                </ul>
+
+                <!-- 2×3 criteria grid -->
+                <div class="loading-checks" id="loading-checklist">
+                    <div id="lc-domain" class="lc-item">
+                        <span class="lc-icon">&#128193;</span>
+                        <span class="lc-label">Domain &amp; Publisher</span>
+                    </div>
+                    <div id="lc-emotional" class="lc-item">
+                        <span class="lc-icon">&#128172;</span>
+                        <span class="lc-label">Emotional Language</span>
+                    </div>
+                    <div id="lc-factual" class="lc-item">
+                        <span class="lc-icon">&#128269;</span>
+                        <span class="lc-label">Fact Verification</span>
+                    </div>
+                    <div id="lc-author" class="lc-item">
+                        <span class="lc-icon">&#9997;</span>
+                        <span class="lc-label">Author Credentials</span>
+                    </div>
+                    <div id="lc-content" class="lc-item">
+                        <span class="lc-icon">&#128196;</span>
+                        <span class="lc-label">Content Quality</span>
+                    </div>
+                    <div id="lc-mdm" class="lc-item">
+                        <span class="lc-icon">&#127464;&#127462;</span>
+                        <span class="lc-label">Threat Classification</span>
+                    </div>
+                </div>
+
             </div>
         </section>
 
