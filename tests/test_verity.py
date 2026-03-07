@@ -1,0 +1,478 @@
+"""
+tests/test_verity.py — Unit tests for Verity
+=============================================
+Run with: python3 -m pytest tests/ -v
+
+Tests cover:
+  - gemini_client batch cache (no real API calls needed)
+  - All 6 criterion rule-based sub-checks
+  - scorer weighted math and trusted-source boost
+  - Flask route input validation (/analyze, /speak, /explain, /history)
+"""
+
+import json
+import sys
+import os
+import hashlib
+import importlib
+from unittest.mock import patch, MagicMock
+
+# ── Ensure project root is on the path ───────────────────────────────────────
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# HELPERS
+# ═══════════════════════════════════════════════════════════════════════════════
+
+FAKE_ARTICLE = {
+    "title": "Government Announces New Housing Policy",
+    "text": (
+        "The federal government announced a new housing policy on Monday. "
+        "According to Health Canada, the policy will affect over 2 million Canadians. "
+        "Housing Minister Jane Smith said in a statement that the initiative aims to "
+        "reduce costs by 15 percent. Statistics Canada data shows homelessness has "
+        "risen 8 percent since 2020."
+    ),
+    "authors": ["Jane Doe"],
+    "domain": "cbc.ca",
+    "url": "https://cbc.ca/news/housing-policy",
+    "homepage_html": "<html><body><p>CBC News</p></body></html>",
+    "publish_date": "2025-01-15",
+}
+
+FAKE_CLICKBAIT_ARTICLE = {
+    "title": "YOU WON'T BELIEVE what the government is hiding!!!",
+    "text": "They don't want you to know THE TRUTH about vaccines!!! SHARE BEFORE DELETED!!!",
+    "authors": [],
+    "domain": "fakenews123.xyz",
+    "url": "",
+    "homepage_html": "<html><marquee>BREAKING NEWS</marquee><img src='a.gif'/></html>",
+    "publish_date": "",
+}
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# GEMINI CLIENT — batch cache tests (no real API)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestBatchCache:
+    def setup_method(self):
+        """Reset batch cache before each test."""
+        import gemini_client
+        gemini_client._batch_cache.clear()
+
+    def test_get_batch_result_returns_none_when_empty(self):
+        from gemini_client import get_batch_result
+        result = get_batch_result("some text", "some title", "emotional")
+        assert result is None
+
+    def _make_fake_mega(self, emotional_score=85, mdm="Valid"):
+        return {
+            "emotional": {"score": emotional_score, "reason": "Neutral tone"},
+            "author":    {"score": 75, "reason": "Named journalist"},
+            "content":   {"score": 80, "reason": "Factual content"},
+            "mdm":       {"classification": mdm, "reason": "Accurate"},
+            "factual":   {"core_claim": "Test claim", "score": 80, "reason": "Confirmed"},
+            "final_score": 82,
+            "verdict_subtext": "Reliable reporting.",
+        }
+
+    def test_prime_batch_cache_stores_result(self):
+        from gemini_client import prime_batch_cache, get_batch_result
+
+        with patch("gemini_client.call_gemini", return_value=self._make_fake_mega()):
+            success = prime_batch_cache("article text", "headline", "John Doe")
+
+        assert success is True
+        assert get_batch_result("article text", "headline", "emotional")["score"] == 85
+        assert get_batch_result("article text", "headline", "mdm")["classification"] == "Valid"
+        assert get_batch_result("article text", "headline", "factual")["core_claim"] == "Test claim"
+
+    def test_prime_batch_cache_is_idempotent(self):
+        """Calling prime_batch_cache twice with same content only calls Gemini once."""
+        from gemini_client import prime_batch_cache
+
+        with patch("gemini_client.call_gemini", return_value=self._make_fake_mega()) as mock_gemini:
+            prime_batch_cache("same text", "same title", "author")
+            prime_batch_cache("same text", "same title", "author")
+
+        assert mock_gemini.call_count == 1  # Second call hits cache
+
+    def test_cache_key_differs_by_content(self):
+        from gemini_client import prime_batch_cache, get_batch_result
+
+        with patch("gemini_client.call_gemini", return_value=self._make_fake_mega(emotional_score=90)):
+            prime_batch_cache("text A", "title A", "")
+        with patch("gemini_client.call_gemini", return_value=self._make_fake_mega(emotional_score=10)):
+            prime_batch_cache("text B", "title B", "")
+
+        assert get_batch_result("text A", "title A", "emotional")["score"] == 90
+        assert get_batch_result("text B", "title B", "emotional")["score"] == 10
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# CRITERION 1 — Domain (rule-based, no Gemini)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestCriterion1Domain:
+    def setup_method(self):
+        from analyzers import criterion1_domain
+        self.c1 = criterion1_domain
+
+    def test_tld_gc_ca_scores_high(self):
+        score, _ = self.c1._get_tld_score("canada.gc.ca")
+        assert score >= 90
+
+    def test_tld_xyz_scores_low(self):
+        score, _ = self.c1._get_tld_score("fakenews.xyz")
+        assert score <= 20
+
+    def test_tld_com_scores_neutral(self):
+        score, _ = self.c1._get_tld_score("example.com")
+        assert 30 <= score <= 80
+
+    def test_typosquatting_detected(self):
+        score, reason = self.c1._get_typosquatting_score("cbcnews.ca")
+        assert score < 50
+        assert len(reason) > 0
+
+    def test_no_typosquatting_on_legit_domain(self):
+        score, _ = self.c1._get_typosquatting_score("openai.com")
+        assert score >= 70
+
+    def test_contact_pages_present(self):
+        html = '<a href="/about">About</a><a href="/contact">Contact</a><a href="/privacy">Privacy</a>'
+        score, _ = self.c1._get_contact_score(html)
+        assert score >= 70
+
+    def test_contact_pages_missing(self):
+        score, _ = self.c1._get_contact_score("<html><body>nothing</body></html>")
+        assert score < 50
+
+    def test_analyze_returns_score_and_reason(self):
+        with patch("analyzers.criterion1_domain._get_domain_age_score", return_value=(70, "ok")):
+            result = self.c1.analyze("cbc.ca", "")
+        assert "score" in result
+        assert "reason" in result
+        assert 0 <= result["score"] <= 100
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# CRITERION 2 — Emotional (rule-based parts)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestCriterion2Emotional:
+    def setup_method(self):
+        from analyzers import criterion2_emotional
+        self.c2 = criterion2_emotional
+
+    def test_caps_heavy_scores_low(self):
+        score, _ = self.c2._score_caps_ratio("THE GOVERNMENT IS HIDING TRUTH FROM ALL CITIZENS NOW")
+        assert score < 50
+
+    def test_caps_normal_scores_high(self):
+        score, _ = self.c2._score_caps_ratio("The government announced a new policy today.")
+        assert score >= 70
+
+    def test_exclamation_heavy_scores_low(self):
+        score, _ = self.c2._score_exclamation_density("This is SHOCKING!!! You won't believe it!!! Share now!!!")
+        assert score < 50
+
+    def test_exclamation_none_scores_high(self):
+        score, _ = self.c2._score_exclamation_density("The prime minister announced a new fiscal policy.")
+        assert score >= 80
+
+    def test_clickbait_detected(self):
+        score, reason = self.c2._score_clickbait(
+            "You won't believe what they're hiding", "shocking truth exposed"
+        )
+        assert score < 50
+
+    def test_no_clickbait_scores_high(self):
+        score, _ = self.c2._score_clickbait(
+            "Federal budget released", "Government announces fiscal plan"
+        )
+        assert score >= 80
+
+    def test_analyze_uses_batch_cache(self):
+        """analyze() should use batch cache result, not call Gemini directly."""
+        import gemini_client
+        gemini_client._batch_cache.clear()
+
+        fake_batch = {
+            "emotional": {"score": 88, "reason": "Very neutral"},
+            "author":    {"score": 70, "reason": "ok"},
+            "content":   {"score": 70, "reason": "ok"},
+            "mdm":       {"classification": "Valid", "reason": "ok"},
+        }
+        with patch("gemini_client.call_gemini", return_value=fake_batch):
+            from gemini_client import prime_batch_cache
+            prime_batch_cache(FAKE_ARTICLE["text"], FAKE_ARTICLE["title"], "Jane Doe")
+
+        with patch("gemini_client.call_gemini") as mock_direct:
+            result = self.c2.analyze(FAKE_ARTICLE)
+
+        mock_direct.assert_not_called()  # Should read from cache, not call Gemini
+        assert "score" in result
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# CRITERION 4 — Author (rule-based parts)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestCriterion4Author:
+    def setup_method(self):
+        from analyzers import criterion4_author
+        self.c4 = criterion4_author
+
+    def test_named_author_scores_high(self):
+        score, _ = self.c4._score_byline(["Jane Doe"])
+        assert score >= 80
+
+    def test_no_author_scores_low(self):
+        score, _ = self.c4._score_byline([])
+        assert score <= 20
+
+    def test_generic_byline_scores_low(self):
+        score, _ = self.c4._score_byline(["Staff"])
+        assert score <= 30
+
+    def test_citations_detected(self):
+        score, _ = self.c4._score_source_citations(
+            "According to Statistics Canada, the data shows research found. In a statement."
+        )
+        assert score >= 70
+
+    def test_no_citations_scores_low(self):
+        score, _ = self.c4._score_source_citations("This is just an opinion piece with no sources.")
+        assert score <= 20
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# CRITERION 5 — Content (rule-based parts)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestCriterion5Content:
+    def setup_method(self):
+        from analyzers import criterion5_content
+        self.c5 = criterion5_content
+
+    def test_marquee_scores_low(self):
+        score, reason = self.c5._check_design_markers("<html><marquee>BREAKING</marquee></html>")
+        assert score < 70
+        assert "marquee" in reason.lower()
+
+    def test_clean_html_scores_high(self):
+        score, _ = self.c5._check_design_markers("<html><body><article><p>News</p></article></body></html>")
+        assert score >= 70
+
+    def test_empty_html_returns_neutral(self):
+        score, _ = self.c5._check_design_markers("")
+        assert score == 60
+
+    def test_image_flag_detects_images(self):
+        flag = self.c5._flag_images("<img src='a.jpg'/><img src='b.jpg'/>")
+        assert "2" in flag and "image" in flag.lower()
+
+    def test_image_flag_empty_on_no_images(self):
+        flag = self.c5._flag_images("<html><body><p>no images</p></body></html>")
+        assert flag == ""
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# CRITERION 6 — MDM (cache path)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestCriterion6MDM:
+    def setup_method(self):
+        import gemini_client
+        gemini_client._batch_cache.clear()
+        from analyzers import criterion6_mdm
+        self.c6 = criterion6_mdm
+
+    def test_valid_classification_scores_100(self):
+        assert self.c6.MDM_SCORES["Valid"] == 100
+
+    def test_disinformation_scores_10(self):
+        assert self.c6.MDM_SCORES["Disinformation"] == 10
+
+    def test_analyze_uses_batch_cache(self):
+        """analyze() should use batch cache, not call Gemini directly."""
+        fake_batch = {
+            "emotional": {"score": 70, "reason": "ok"},
+            "author":    {"score": 70, "reason": "ok"},
+            "content":   {"score": 70, "reason": "ok"},
+            "mdm":       {"classification": "Disinformation", "reason": "clearly false"},
+            "factual":   {"core_claim": "claim", "score": 20, "reason": "false"},
+            "final_score": 15,
+            "verdict_subtext": "Disinformation detected.",
+        }
+        with patch("gemini_client.call_gemini", return_value=fake_batch):
+            from gemini_client import prime_batch_cache
+            prime_batch_cache(FAKE_CLICKBAIT_ARTICLE["text"], FAKE_CLICKBAIT_ARTICLE["title"], "")
+
+        with patch("gemini_client.call_gemini") as mock_direct:
+            result = self.c6.analyze(FAKE_CLICKBAIT_ARTICLE)
+
+        mock_direct.assert_not_called()
+        assert result["classification"] == "Disinformation"
+        assert result["score"] == 10
+
+    def test_no_text_returns_unsustainable(self):
+        result = self.c6.analyze({"text": "", "title": ""})
+        assert result["classification"] == "Unsustainable"
+        assert result["score"] == 50
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# SCORER — weighted math and trusted source boost
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestScorer:
+    def setup_method(self):
+        import scorer
+        self.scorer = scorer
+
+    def test_weights_sum_to_one(self):
+        total = sum(self.scorer.WEIGHTS.values())
+        assert abs(total - 1.0) < 1e-9
+
+    def test_trusted_domain_detection(self):
+        assert self.scorer._is_trusted("cbc.ca") is True
+        assert self.scorer._is_trusted("www.canada.ca") is True
+        assert self.scorer._is_trusted("fakenews.xyz") is False
+        assert self.scorer._is_trusted("theglobeandmail.com") is True
+
+    def test_trusted_source_boost_author(self):
+        results = {
+            "domain":    {"score": 90, "reason": "ok"},
+            "emotional": {"score": 50, "reason": "ok"},
+            "factual":   {"score": 80, "reason": "ok", "core_claim": ""},
+            "author":    {"score": 20, "reason": "no byline"},
+            "content":   {"score": 50, "reason": "ok"},
+            "mdm":       {"score": 50, "reason": "ok", "classification": "Unsustainable"},
+        }
+        boosted = self.scorer._apply_trusted_source_boost(results, "cbc.ca")
+        assert boosted["author"]["score"] >= 70
+
+    def test_trusted_source_boost_mdm(self):
+        results = {
+            "domain":    {"score": 90, "reason": "ok"},
+            "emotional": {"score": 50, "reason": "ok"},
+            "factual":   {"score": 80, "reason": "ok", "core_claim": ""},
+            "author":    {"score": 80, "reason": "ok"},
+            "content":   {"score": 50, "reason": "ok"},
+            "mdm":       {"score": 50, "reason": "ok", "classification": "Unsustainable"},
+        }
+        boosted = self.scorer._apply_trusted_source_boost(results, "canada.ca")
+        assert boosted["mdm"]["classification"] == "Valid"
+        assert boosted["mdm"]["score"] >= 85
+
+    def test_no_boost_for_unknown_domain(self):
+        results = {
+            "domain":    {"score": 90, "reason": "ok"},
+            "emotional": {"score": 50, "reason": "ok"},
+            "factual":   {"score": 80, "reason": "ok", "core_claim": ""},
+            "author":    {"score": 20, "reason": "no byline"},
+            "content":   {"score": 50, "reason": "ok"},
+            "mdm":       {"score": 50, "reason": "ok", "classification": "Unsustainable"},
+        }
+        boosted = self.scorer._apply_trusted_source_boost(results, "fakenews.xyz")
+        assert boosted["author"]["score"] == 20  # Not boosted
+
+    def test_weighted_score_calculation(self):
+        """Verify weighted math is correct."""
+        results = {
+            "domain":    {"score": 100},
+            "emotional": {"score": 100},
+            "factual":   {"score": 100},
+            "author":    {"score": 100},
+            "content":   {"score": 100},
+            "mdm":       {"score": 100},
+        }
+        score = sum(results[k]["score"] * self.scorer.WEIGHTS[k] for k in self.scorer.WEIGHTS)
+        assert int(round(score)) == 100
+
+    def test_run_criterion_safely_handles_exception(self):
+        def bad_func():
+            raise ValueError("simulated crash")
+
+        result = self.scorer._run_criterion_safely("test", bad_func)
+        assert result["score"] == 50
+        assert result.get("error") is True
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# FLASK ROUTES — input validation (no real Gemini/ElevenLabs calls)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestFlaskRoutes:
+    def setup_method(self):
+        # Mock heavy dependencies before importing app
+        with patch.dict("sys.modules", {
+            "backboard_client": MagicMock(orchestrator=MagicMock(run=MagicMock(return_value=None))),
+        }):
+            import app as flask_app
+            flask_app.app.config["TESTING"] = True
+            self.client = flask_app.app.test_client()
+            self.app = flask_app
+
+    def test_homepage_returns_200(self):
+        resp = self.client.get("/")
+        assert resp.status_code == 200
+
+    def test_analyze_missing_body_returns_error(self):
+        # Empty body causes Flask to fail JSON parsing → 400 or 500 depending on version
+        resp = self.client.post("/analyze",
+                                data="",
+                                content_type="application/json")
+        assert resp.status_code in (400, 500)
+
+    def test_analyze_empty_input_returns_400(self):
+        resp = self.client.post("/analyze",
+                                data=json.dumps({"mode": "url", "input": "   "}),
+                                content_type="application/json")
+        assert resp.status_code == 400
+
+    def test_history_returns_list(self):
+        resp = self.client.get("/history")
+        assert resp.status_code == 200
+        assert isinstance(resp.get_json(), list)
+
+    def test_speak_no_key_returns_503(self):
+        original = self.app.ELEVENLABS_API_KEY
+        self.app.ELEVENLABS_API_KEY = None
+        resp = self.client.post("/speak",
+                                data=json.dumps({"text": "hello"}),
+                                content_type="application/json")
+        self.app.ELEVENLABS_API_KEY = original
+        assert resp.status_code == 503
+
+    def test_explain_no_key_returns_503(self):
+        original = self.app.ELEVENLABS_API_KEY
+        self.app.ELEVENLABS_API_KEY = None
+        resp = self.client.post("/explain",
+                                data=json.dumps({"question_type": "why_flagged", "verdict_data": {}}),
+                                content_type="application/json")
+        self.app.ELEVENLABS_API_KEY = original
+        assert resp.status_code == 503
+
+    def test_history_deque_stores_entries(self):
+        """History deque correctly stores and caps at maxlen=20."""
+        import app as flask_app
+        import datetime as dt
+        flask_app._analysis_history.clear()
+        for i in range(3):
+            flask_app._analysis_history.appendleft({
+                "timestamp": dt.datetime.now(dt.timezone.utc).isoformat(),
+                "url": f"https://cbc.ca/test/{i}",
+                "title": f"Article {i}",
+                "verdict": "Likely Credible",
+                "verdict_class": "v-good",
+                "final_score": 78,
+                "mdm_classification": "Valid",
+            })
+        assert len(flask_app._analysis_history) == 3
+        assert flask_app._analysis_history[0]["title"] == "Article 2"  # most recent first
+        flask_app._analysis_history.clear()

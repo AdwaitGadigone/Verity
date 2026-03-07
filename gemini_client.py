@@ -36,6 +36,7 @@ HOW TO USE THIS FILE:
 
 import os
 import json
+import hashlib
 
 # python-dotenv lets us read API keys from a .env file
 # instead of hardcoding them into the source code
@@ -45,19 +46,99 @@ from dotenv import load_dotenv
 # so we can access them with os.getenv()
 load_dotenv()
 
-# ── Set up Multiple Gemini Clients (for rate limit bypass) ───────────────────
-# We search the .env file for ALL variables starting with "GEMINI_API_KEY"
-# (e.g., GEMINI_API_KEY_1, GEMINI_API_KEY_2). This allows us to cycle through
-# multiple keys to bypass the free-tier quota limits during the hackathon.
+# ── Batch analysis cache ─────────────────────────────────────────────────────
+# Stores one-shot batch Gemini results keyed by md5 of article content.
+# This means criteria 2, 4, 5, 6 all read from this dict instead of each
+# making a separate Gemini call — cutting 4 calls down to 1.
+_batch_cache: dict = {}
+
+
+def prime_mega_cache(article_text: str, title: str, author_name: str) -> bool:
+    """
+    Makes ONE Gemini call that covers ALL AI-analysis for criteria 2-6 AND
+    produces the final score — replacing what was previously 5 separate calls.
+
+    Covers:
+      - Criteria 2 (emotional), 4 (author), 5 (content), 6 (MDM)
+      - Criterion 3 (factual): claim extraction + verification + extraordinary test
+      - Final credibility score + verdict subtext
+
+    Call this from scorer.py once before running any criteria.
+    Returns True if the cache was successfully populated.
+    """
+    cache_key = hashlib.md5((article_text[:3000] + title).encode()).hexdigest()
+    if cache_key in _batch_cache:
+        return True  # Same content already analyzed
+
+    sample = f"HEADLINE: {title}\n\nARTICLE (first 2500 chars):\n{article_text[:2500]}"
+    author_info = f'Author: "{author_name}"' if author_name else "No named author."
+
+    prompt = f"""You are an expert Canadian misinformation analyst using the ITSAP.00.300 framework from the Canadian Centre for Cyber Security. Analyze the article below and return a single JSON object covering ALL criteria.
+
+{author_info}
+{sample}
+
+Return ONLY this JSON structure (no markdown, no extra text):
+{{
+  "emotional": {{
+    "score": <0-100, 100=completely neutral, 0=extremely manipulative>,
+    "reason": "<2 sentences on emotional tone and clickbait>"
+  }},
+  "author": {{
+    "score": <0-100, 80-100=clearly real journalist, 0-49=fake/pseudonym>,
+    "reason": "<2 sentences on author credibility>"
+  }},
+  "content": {{
+    "score": <0-100, 100=entirely factual with data, 0=pure emotional appeal>,
+    "reason": "<2 sentences on factual vs emotional balance>"
+  }},
+  "mdm": {{
+    "classification": "<one of: Valid, Misinformation, Malinformation, Disinformation, Unsustainable>",
+    "reason": "<2 sentences explaining the ITSAP.00.300 classification>"
+  }},
+  "factual": {{
+    "core_claim": "<the single most important factual claim in one sentence, or empty string>",
+    "score": <0-100, 90-100=confirmed by multiple reliable sources, 0-29=contradicted by sources>,
+    "reason": "<2 sentences on whether the core claim is accurate per reputable Canadian sources>"
+  }},
+  "final_score": <0-100 overall credibility>,
+  "verdict_subtext": "<one sentence stating the content type and overall credibility assessment>"
+}}"""
+
+    result = call_gemini(prompt)
+    required = ("emotional", "author", "content", "mdm", "factual", "final_score")
+    if result and all(k in result for k in required):
+        _batch_cache[cache_key] = result
+        return True
+    return False
+
+
+# Keep old name as alias so existing tests/code doesn't break
+def prime_batch_cache(article_text: str, title: str, author_name: str) -> bool:
+    return prime_mega_cache(article_text, title, author_name)
+
+
+def get_batch_result(article_text: str, title: str, analysis_type: str) -> dict | None:
+    """
+    Returns pre-computed batch result for a given analysis type,
+    or None if the cache hasn't been primed yet.
+
+    analysis_type: one of 'emotional', 'author', 'content', 'mdm'
+    """
+    cache_key = hashlib.md5((article_text[:3000] + title).encode()).hexdigest()
+    batch = _batch_cache.get(cache_key)
+    if batch:
+        return batch.get(analysis_type)
+    return None
+
+# ── Set up Gemini clients (cycles through all GEMINI_API_KEY_* keys) ──────────
 _api_keys = []
 for key, value in os.environ.items():
     if key.startswith("GEMINI_API_KEY") and value.strip():
         _api_keys.append(value.strip())
 
-# Fallback if the user simply has exactly "GEMINI_API_KEY"
-fallback_key = os.getenv("GEMINI_API_KEY")
-if not _api_keys and fallback_key:
-    _api_keys.append(fallback_key)
+if not _api_keys and os.getenv("GEMINI_API_KEY"):
+    _api_keys.append(os.getenv("GEMINI_API_KEY"))
 
 _clients = []
 _current_client_idx = 0
@@ -66,81 +147,90 @@ try:
     from google import genai
     from google.genai import types as genai_types
 
-    # Create a client connection for EACH valid key we found
     for key in _api_keys:
         _clients.append(genai.Client(api_key=key))
-        
+
     if not _clients:
         print("[WARNING] No Gemini API keys found in .env file.")
 except ImportError:
     print("[WARNING] google-genai not installed. Run: pip install google-genai")
 
+# ── Set up Grok fallback client (xAI, OpenAI-compatible API) ─────────────────
+# When all Gemini quota is exhausted, call_gemini() automatically falls back to
+# Grok. Add GROK_API_KEY to .env to enable this.
+_grok_client = None
+try:
+    _grok_key = os.getenv("GROK_API_KEY", "").strip()
+    if _grok_key:
+        from openai import OpenAI
+        _grok_client = OpenAI(api_key=_grok_key, base_url="https://api.x.ai/v1")
+        print("[Grok] Fallback client ready (xAI grok-2-1212).")
+except ImportError:
+    print("[Grok] openai package not installed. Run: pip install openai")
+except Exception as e:
+    print(f"[Grok] Client init failed: {e}")
+
+
+def _call_grok(prompt: str) -> dict | None:
+    """Call Grok (xAI) as a fallback when Gemini quota is exhausted."""
+    if not _grok_client:
+        return None
+    try:
+        response = _grok_client.chat.completions.create(
+            model="grok-2-1212",
+            messages=[{"role": "user", "content": prompt}],
+            response_format={"type": "json_object"},
+            temperature=0.1,
+            max_tokens=1024,
+        )
+        return json.loads(response.choices[0].message.content)
+    except json.JSONDecodeError:
+        return None
+    except Exception as e:
+        print(f"[Grok error] {e}")
+        return None
+
 
 def call_gemini(prompt: str, model: str = "gemini-2.0-flash") -> dict | None:
     """
-    Sends a question (prompt) to Google Gemini and returns the answer as
-    a Python dictionary.
-
-    This is the ONLY function the rest of the app needs to call for AI analysis.
-
-    Parameters:
-        prompt (str): The full question/instruction to send to Gemini
-        model (str):  Which Gemini model to use (default: gemini-2.0-flash,
-                      which is fast and free-tier friendly)
-
-    Returns:
-        A Python dict with Gemini's answer (parsed from JSON), for example:
-          {"score": 85, "reason": "The article cites multiple credible sources"}
-        OR None if something went wrong (network error, API limit, etc.)
-
-    Why we return None on failure instead of crashing:
-        During the hackathon demo, we can't have the whole app crash just
-        because one API call failed. If Gemini is down or slow, the rest
-        of the analysis still works — that criterion just gets a neutral score.
+    Sends a prompt to Gemini (primary) or Grok (fallback when quota exhausted).
+    Returns a parsed JSON dict, or None if all providers fail.
     """
-    # If we don't have ANY working clients, return None (no crash)
-    if not _clients:
-        return None
-
     global _current_client_idx
 
-    # We use a loop so if one key fails with a quota limit, we try the next.
-    # We will try EXACTLY the number of keys we have before giving up.
+    # ── Try Gemini first (cycle through all keys) ─────────────────────────────
     for attempt in range(len(_clients)):
         client = _clients[_current_client_idx]
         try:
-            # Send the prompt to Gemini
             response = client.models.generate_content(
                 model=model,
                 contents=prompt,
                 config=genai_types.GenerateContentConfig(
                     response_mime_type="application/json",
                     temperature=0.1,
-                    max_output_tokens=512,
+                    max_output_tokens=1024,
                 ),
             )
-
-            # Parse the JSON text into a Python dictionary
             return json.loads(response.text)
 
         except json.JSONDecodeError:
-            # Gemini returned something that wasn't valid JSON, not a quota issue
             return None
         except Exception as e:
             error_msg = str(e).lower()
-            # Check if this error is a 429 Resource Exhausted (quota hit)
             if "429" in error_msg or "quota" in error_msg or "exhausted" in error_msg:
-                print(f"[Gemini Quota] API Key #{_current_client_idx + 1} exhausted. Switching to next key...")
+                print(f"[Gemini Quota] API Key #{_current_client_idx + 1} exhausted. Switching...")
                 _current_client_idx = (_current_client_idx + 1) % len(_clients)
-                # Loop continues and tries again with the new client
                 continue
             else:
-                # Any other weird error (network failure, etc.)
                 print(f"[Gemini error] {e}")
                 return None
 
-    # If the loop fully finishes, it means ALL our keys are exhausted
-    print("[Gemini error] ALL provided API keys have exhausted their free-tier quotas.")
+    # ── All Gemini keys exhausted — try Grok ─────────────────────────────────
+    if _grok_client:
+        print("[Gemini] All keys exhausted. Falling back to Grok...")
+        return _call_grok(prompt)
+
+    print("[AI] All providers exhausted. No result available.")
     return None
 
 

@@ -21,7 +21,7 @@ WHAT IT CHECKS (3 sub-checks):
 """
 
 import re                        # Regular expressions for pattern matching
-from gemini_client import call_gemini  # Our shared Gemini API connection
+from gemini_client import call_gemini, get_batch_result  # Our shared Gemini API connection
 
 
 # ── SUB-CHECK 1: Design Quality Markers ──────────────────────────────────────
@@ -84,15 +84,21 @@ def _check_design_markers(homepage_html: str) -> tuple:
 # ── SUB-CHECK 2: Factual vs Emotional Content ───────────────────────────────
 def _check_factual_vs_emotional_content(text: str) -> tuple:
     """
-    Uses Gemini to assess whether the article is primarily FACTUAL
-    (has real data, quotes, verifiable claims) or just EMOTIONAL
-    (pure opinion, outrage, fear-mongering without substance).
+    Uses Gemini to assess whether the article is primarily FACTUAL or EMOTIONAL.
+    Checks the batch cache first (primed by scorer.py) before making a new call.
 
     Returns (score 0-100, reason). 100 = all factual, 0 = pure emotional.
     """
     if not text:
         return 50, "Content integrity check unavailable -- treated as neutral"
 
+    # Check batch cache first
+    cached = get_batch_result(text, "", "content")
+    if cached and "score" in cached:
+        score = max(0, min(100, int(cached["score"])))
+        return score, cached.get("reason", "Content integrity assessed")
+
+    # Fallback: direct Gemini call
     prompt = f"""
 You are evaluating article content integrity for a Canadian misinformation detection tool.
 
@@ -112,7 +118,6 @@ Rate from 0 to 100 where:
 Respond with ONLY valid JSON:
 {{"score": <0-100>, "reason": "<2-3 short sentences explaining the content balance and any bias>"}}
 """
-
     result = call_gemini(prompt)
     if result and "score" in result:
         score = max(0, min(100, int(result["score"])))
