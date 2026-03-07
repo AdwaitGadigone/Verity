@@ -137,6 +137,24 @@ def scrape_url(url: str) -> dict:
             if not result["title"] and soup.title:
                 result["title"] = soup.title.string or ""
 
+            # Check for Access Denied or empty titles and fallback to URL slug
+            current_title = str(result["title"]).lower() if result["title"] else ""
+            if not current_title or "access denied" in current_title or "cloudflare" in current_title:
+                import re
+                from urllib.parse import unquote
+                # Extract the last meaningful part of the path
+                path = urlparse(url).path
+                # Remove trailing slashes and extensions like .html
+                path = re.sub(r'/+$', '', path)
+                slug = path.split('/')[-1]
+                slug = re.sub(r'\.(html|php|aspx|jsp)$', '', slug, flags=re.IGNORECASE)
+                # Remove long trailing IDs common in news URLs (e.g. -101772845653054)
+                slug = re.sub(r'-\d{6,}', '', slug)
+                # Replace dashes with spaces and title case it
+                fallback_title = unquote(slug).replace('-', ' ').title()
+                if fallback_title and len(fallback_title) > 3:
+                    result["title"] = fallback_title
+
             # Find ALL <p> (paragraph) tags and combine their text
             # This gives us the article body text
             paragraphs = soup.find_all("p")
