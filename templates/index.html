@@ -113,6 +113,17 @@
                 </div>
             </div>
 
+            <!-- Recent Analyses History -->
+            <div class="container" id="history-container" style="display:none">
+                <div class="history-card">
+                    <div class="history-header">
+                        <span class="history-title">&#128337; Recent Analyses</span>
+                        <span class="history-subtitle">Click to re-analyze</span>
+                    </div>
+                    <div id="history-list" class="history-list"></div>
+                </div>
+            </div>
+
         </section>
 
         <!-- ═══════════════════════════════════════════════════
@@ -182,6 +193,21 @@
                             &#9632; Stop
                         </button>
                     </div>
+                    <!-- Follow-up conversational voice questions -->
+                    <div class="followup-buttons" id="followup-buttons" style="display:none">
+                        <p class="followup-label">Ask a follow-up:</p>
+                        <div class="followup-row">
+                            <button class="followup-btn" onclick="askFollowUp('why_flagged')">
+                                &#10067; Why is this flagged?
+                            </button>
+                            <button class="followup-btn" onclick="askFollowUp('what_check')">
+                                &#128270; What should I verify?
+                            </button>
+                            <button class="followup-btn" onclick="askFollowUp('compare')">
+                                &#128202; Strongest signal?
+                            </button>
+                        </div>
+                    </div>
                     <p class="voice-hint">Powered by ElevenLabs AI Voice</p>
                 </div>
 
@@ -202,7 +228,7 @@
                 target="_blank" rel="noopener">Canadian Centre for Cyber Security ITSAP.00.300</a>
             &mdash; Always verify with multiple sources.
         </p>
-        <p>Built at Hack Canada 2026 &middot; Powered by Google Gemini &amp; ElevenLabs</p>
+        <p>Built at Hack Canada 2026 &middot; Powered by Google Gemini, ElevenLabs &amp; Backboard.io</p>
         <p class="footer-team">by Adwait Gadigone, Hasan Naqvi, Haroldina Koolaid</p>
     </footer>
 

@@ -20,7 +20,7 @@ WHAT IT CHECKS (3 sub-checks):
 """
 
 import re                        # Regular expressions for pattern matching
-from gemini_client import call_gemini  # Our shared Gemini API connection
+from gemini_client import call_gemini, get_batch_result  # Our shared Gemini API connection
 
 # Generic/fake bylines that don't identify a real person
 GENERIC_BYLINES = [
@@ -65,14 +65,20 @@ def _score_byline(authors: list) -> tuple:
 def _score_author_verifiability(author_name: str, text: str) -> tuple:
     """
     Uses Gemini to assess whether the author name looks like a real person.
-    Gemini has knowledge of well-known journalists and can assess whether
-    a name is plausible or clearly fake.
+    Checks the batch cache first (primed by scorer.py) before making a new call.
 
     Returns (score 0-100, reason).
     """
     if not author_name:
         return 40, "Author verifiability check skipped -- no author name available"
 
+    # Check batch cache first
+    cached = get_batch_result(text, "", "author")
+    if cached and "score" in cached:
+        score = max(0, min(100, int(cached["score"])))
+        return score, cached.get("reason", "Author verifiability assessed")
+
+    # Fallback: direct Gemini call
     prompt = f"""
 You are helping a Canadian misinformation detection tool evaluate author credibility.
 
@@ -87,7 +93,6 @@ Respond with ONLY valid JSON:
 Score guide: 80-100 = clearly real journalist, 50-79 = likely real but unconfirmed,
 0-49 = appears to be a pseudonym or fake name
 """
-
     result = call_gemini(prompt)
     if result and "score" in result:
         score = max(0, min(100, int(result["score"])))

@@ -160,6 +160,17 @@ def run_all(article_data: dict) -> dict:
     """
     domain = article_data.get("domain", "")
     homepage_html = article_data.get("homepage_html", "")
+    article_text = article_data.get("text", "")
+    title = article_data.get("title", "")
+    authors = article_data.get("authors", [])
+    author_name = authors[0] if authors else ""
+
+    # ── Batch Gemini call for criteria 2, 4, 5, 6 ────────────────────────────
+    # Instead of 4 separate Gemini API calls (one per criterion), we make ONE
+    # combined call here and cache the result. Each criterion module reads from
+    # the cache via get_batch_result() instead of calling Gemini itself.
+    from gemini_client import prime_batch_cache
+    prime_batch_cache(article_text, title, author_name)
 
     # Define all 6 tasks
     tasks = [

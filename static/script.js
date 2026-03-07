@@ -32,6 +32,7 @@
 let currentMode = "url";   // "url" or "text"
 let lastResult = null;    // stored for voice readout
 let currentAudio = null;    // currently-playing Audio object
+let isPlayingExplain = false; // true while a follow-up is playing
 
 // ── Criterion icons (matched to key names from scorer.py) ────────
 const CRITERION_ICONS = {
@@ -125,6 +126,8 @@ async function runAnalysis() {
     lastResult = data;
     renderResults(data);
     showSection("results-section");
+    showFollowUpButtons();
+    loadHistory();  // Refresh history sidebar with the new result
 
   } catch (err) {
     showSection("input-section");
@@ -301,8 +304,11 @@ function stopAudio() {
 function resetToInput() {
   if (currentAudio) { currentAudio.pause(); currentAudio = null; }
   lastResult = null;
+  isPlayingExplain = false;
   const ui = el("url-input"); if (ui) ui.value = "";
   const ti = el("text-input"); if (ti) ti.value = "";
+  const followup = el("followup-buttons");
+  if (followup) followup.style.display = "none";
   document.querySelectorAll(".error-banner").forEach(b => b.remove());
   showSection("input-section");
 }
@@ -338,10 +344,132 @@ function esc(str) {
   return d.innerHTML;
 }
 
+// ══════════════════════════════════════════════════════════════════
+// ELEVENLABS FOLLOW-UP (conversational voice questions)
+// ══════════════════════════════════════════════════════════════════
+async function askFollowUp(questionType) {
+  if (!lastResult || isPlayingExplain) return;
+
+  isPlayingExplain = true;
+  const stopBtn = el("stop-btn");
+  if (stopBtn) stopBtn.style.display = "inline-block";
+
+  // Dim the follow-up buttons while loading
+  document.querySelectorAll(".followup-btn").forEach(b => {
+    b.disabled = true;
+    b.style.opacity = "0.5";
+  });
+
+  try {
+    const response = await fetch("/explain", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ question_type: questionType, verdict_data: lastResult }),
+    });
+
+    if (!response.ok) throw new Error("Explain failed (HTTP " + response.status + ")");
+
+    const audioBlob = await response.blob();
+    const audioUrl = URL.createObjectURL(audioBlob);
+
+    if (currentAudio) { currentAudio.pause(); currentAudio = null; }
+
+    currentAudio = new Audio(audioUrl);
+    currentAudio.play();
+    currentAudio.onended = () => {
+      URL.revokeObjectURL(audioUrl);
+      currentAudio = null;
+      isPlayingExplain = false;
+      if (stopBtn) stopBtn.style.display = "none";
+      document.querySelectorAll(".followup-btn").forEach(b => {
+        b.disabled = false;
+        b.style.opacity = "1";
+      });
+    };
+  } catch (err) {
+    isPlayingExplain = false;
+    if (stopBtn) stopBtn.style.display = "none";
+    document.querySelectorAll(".followup-btn").forEach(b => {
+      b.disabled = false;
+      b.style.opacity = "1";
+    });
+    alert("Follow-up unavailable: " + err.message);
+  }
+}
+
+
+// ══════════════════════════════════════════════════════════════════
+// HISTORY — load and render recent analyses
+// ══════════════════════════════════════════════════════════════════
+async function loadHistory() {
+  try {
+    const response = await fetch("/history");
+    if (!response.ok) return;
+    const items = await response.json();
+    if (!items || items.length === 0) return;
+
+    const container = el("history-container");
+    const list = el("history-list");
+    if (!container || !list) return;
+
+    list.innerHTML = "";
+    items.forEach(item => {
+      const row = document.createElement("div");
+      row.className = "history-row";
+
+      const scoreClass = item.final_score >= 72 ? "score-high"
+                       : item.final_score >= 45 ? "score-mid"
+                       : "score-low";
+
+      const label = item.url
+        ? item.url.replace(/^https?:\/\//, "").split("/")[0]
+        : (item.title || "Pasted text");
+
+      row.innerHTML =
+        '<div class="history-row-inner">' +
+        '<span class="history-domain">' + esc(label.substring(0, 40)) + (label.length > 40 ? "…" : "") + '</span>' +
+        '<span class="history-verdict ' + esc(item.verdict_class) + '">' + esc(item.verdict) + '</span>' +
+        '<span class="history-score ' + scoreClass + '">' + item.final_score + '/100</span>' +
+        '</div>';
+
+      // Click re-fills the URL input and analyzes
+      if (item.url) {
+        row.style.cursor = "pointer";
+        row.title = "Re-analyze: " + item.url;
+        row.addEventListener("click", () => {
+          switchTab("url");
+          const urlInput = el("url-input");
+          if (urlInput) urlInput.value = item.url;
+          runAnalysis();
+        });
+      }
+
+      list.appendChild(row);
+    });
+
+    container.style.display = "block";
+  } catch (_) {
+    // History is non-critical — silently ignore errors
+  }
+}
+
+
+// ══════════════════════════════════════════════════════════════════
+// Show follow-up buttons after verdict is rendered
+// ══════════════════════════════════════════════════════════════════
+function showFollowUpButtons() {
+  const followup = el("followup-buttons");
+  if (followup) followup.style.display = "block";
+}
+
+
 // Enter key on URL field → analyze
 document.addEventListener("DOMContentLoaded", () => {
   const urlInput = el("url-input");
   if (urlInput) urlInput.addEventListener("keydown", e => {
     if (e.key === "Enter") runAnalysis();
   });
+
+  // Load history on page load
+  loadHistory();
 });

@@ -36,6 +36,7 @@ HOW TO USE THIS FILE:
 
 import os
 import json
+import hashlib
 
 # python-dotenv lets us read API keys from a .env file
 # instead of hardcoding them into the source code
@@ -44,6 +45,78 @@ from dotenv import load_dotenv
 # This reads the .env file and puts the values into environment variables
 # so we can access them with os.getenv()
 load_dotenv()
+
+# ── Batch analysis cache ─────────────────────────────────────────────────────
+# Stores one-shot batch Gemini results keyed by md5 of article content.
+# This means criteria 2, 4, 5, 6 all read from this dict instead of each
+# making a separate Gemini call — cutting 4 calls down to 1.
+_batch_cache: dict = {}
+
+
+def prime_batch_cache(article_text: str, title: str, author_name: str) -> bool:
+    """
+    Makes ONE Gemini call that covers the AI-analysis portions of criteria
+    2 (emotional), 4 (author), 5 (content), and 6 (MDM) simultaneously.
+
+    Call this from scorer.py BEFORE launching the criterion threads.
+    Each criterion's Gemini sub-function will then read from _batch_cache
+    instead of making its own API call.
+
+    Returns True if the cache was successfully populated.
+    """
+    cache_key = hashlib.md5((article_text[:3000] + title).encode()).hexdigest()
+    if cache_key in _batch_cache:
+        return True  # Already cached (e.g. same URL submitted twice)
+
+    sample = f"HEADLINE: {title}\n\nARTICLE (first 2500 chars):\n{article_text[:2500]}"
+    author_info = f'Author name: "{author_name}"' if author_name else "No named author."
+
+    prompt = f"""You are a Canadian misinformation analysis AI. Analyze the following article for four criteria simultaneously and return a single JSON object.
+
+{author_info}
+
+{sample}
+
+Return ONLY valid JSON with this exact structure:
+{{
+  "emotional": {{
+    "score": <0-100, where 100=completely neutral/factual, 0=extremely manipulative>,
+    "reason": "<2-3 sentences on emotional tone, fear-mongering, or clickbait language>"
+  }},
+  "author": {{
+    "score": <0-100, where 80-100=clearly real journalist, 0-49=appears fake or pseudonym>,
+    "reason": "<2-3 sentences assessing whether this is a real, identifiable journalist>"
+  }},
+  "content": {{
+    "score": <0-100, where 100=entirely factual with concrete data, 0=pure emotional appeal>,
+    "reason": "<2-3 sentences on the factual vs emotional content balance>"
+  }},
+  "mdm": {{
+    "classification": "<exactly one of: Valid, Misinformation, Malinformation, Disinformation, Unsustainable>",
+    "reason": "<2-3 sentences explaining the MDM classification per ITSAP.00.300>"
+  }}
+}}"""
+
+    result = call_gemini(prompt)
+    if result and all(k in result for k in ("emotional", "author", "content", "mdm")):
+        result["_key"] = cache_key
+        _batch_cache[cache_key] = result
+        return True
+    return False
+
+
+def get_batch_result(article_text: str, title: str, analysis_type: str) -> dict | None:
+    """
+    Returns pre-computed batch result for a given analysis type,
+    or None if the cache hasn't been primed yet.
+
+    analysis_type: one of 'emotional', 'author', 'content', 'mdm'
+    """
+    cache_key = hashlib.md5((article_text[:3000] + title).encode()).hexdigest()
+    batch = _batch_cache.get(cache_key)
+    if batch:
+        return batch.get(analysis_type)
+    return None
 
 # ── Set up Multiple Gemini Clients (for rate limit bypass) ───────────────────
 # We search the .env file for ALL variables starting with "GEMINI_API_KEY"
