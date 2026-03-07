@@ -284,9 +284,16 @@ class BackboardOrchestrator:
                 reason = f"{date_reason}. {reason}"
             return {"score": final_score, "reason": reason, "core_claim": cached.get("core_claim", "")}
 
-        # Fallback: run the full criterion3 flow (will use batch cache internally)
-        from analyzers import criterion3_factual
-        return criterion3_factual.analyze(article_data)
+        # Mega cache missed (Gemini quota likely exhausted) — return rule-based date check only.
+        # Do NOT fall back to criterion3_factual.analyze() — that makes 2 more Gemini calls that
+        # will also fail, wasting quota.
+        from analyzers.criterion3_factual import _check_date_recency
+        date_score, date_reason = _check_date_recency(str(publish_date) if publish_date else "")
+        return {
+            "score": date_score,
+            "reason": f"{date_reason}. AI fact-checking unavailable (quota exhausted).",
+            "core_claim": "",
+        }
 
     def _build_final_result(self, article_data: dict, domain: dict,
                              analysis: dict, fact: dict) -> dict | None:
