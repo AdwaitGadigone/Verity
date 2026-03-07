@@ -29,10 +29,11 @@
  */
 
 // ── Global state ─────────────────────────────────────────────────
-let currentMode = "url";   // "url" or "text"
-let lastResult = null;    // stored for voice readout
-let currentAudio = null;    // currently-playing Audio object
-let isPlayingExplain = false; // true while a follow-up is playing
+let currentMode = "url";        // "url" or "text"
+let lastResult = null;          // stored for voice readout
+let currentAudio = null;        // currently-playing Audio object (verdict/follow-up)
+let summaryAudio = null;        // currently-playing Audio object (summary)
+let isPlayingExplain = false;   // true while a follow-up is playing
 
 // ── Criterion icons (matched to key names from scorer.py) ────────
 const CRITERION_ICONS = {
@@ -321,10 +322,65 @@ function stopAudio() {
 
 
 // ══════════════════════════════════════════════════════════════════
+// SUMMARY VOICE — Read neutral summary aloud via ElevenLabs
+// ══════════════════════════════════════════════════════════════════
+async function readSummaryAloud() {
+  if (!lastResult || !lastResult.neutral_summary) return;
+
+  const speakBtn = el("summary-speak-btn");
+  const stopBtn  = el("summary-stop-btn");
+
+  if (speakBtn) { speakBtn.disabled = true; speakBtn.textContent = "Generating…"; }
+
+  // Stop any other audio playing
+  if (currentAudio) { currentAudio.pause(); currentAudio = null; }
+  if (summaryAudio) { summaryAudio.pause(); summaryAudio = null; }
+
+  try {
+    const response = await fetch("/speak", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: lastResult.neutral_summary }),
+    });
+
+    if (!response.ok) throw new Error("Speech generation failed (HTTP " + response.status + ")");
+
+    const audioBlob = await response.blob();
+    const audioUrl  = URL.createObjectURL(audioBlob);
+
+    summaryAudio = new Audio(audioUrl);
+    if (stopBtn)  stopBtn.style.display  = "inline-block";
+    if (speakBtn) speakBtn.textContent   = "🔊 Playing…";
+
+    summaryAudio.play();
+    summaryAudio.onended = () => {
+      URL.revokeObjectURL(audioUrl);
+      summaryAudio = null;
+      if (stopBtn)  stopBtn.style.display  = "none";
+      if (speakBtn) { speakBtn.textContent = "🔊 Read"; speakBtn.disabled = false; }
+    };
+
+  } catch (err) {
+    if (speakBtn) { speakBtn.textContent = "🔊 Read"; speakBtn.disabled = false; }
+    if (stopBtn)  stopBtn.style.display  = "none";
+    alert("Summary voice unavailable: " + err.message);
+  }
+}
+
+function stopSummaryAudio() {
+  if (summaryAudio) {
+    summaryAudio.pause();
+    summaryAudio.dispatchEvent(new Event("ended"));
+  }
+}
+
+
+// ══════════════════════════════════════════════════════════════════
 // RESET — called by logo click or "Analyze Another Article"
 // ══════════════════════════════════════════════════════════════════
 function resetToInput() {
   if (currentAudio) { currentAudio.pause(); currentAudio = null; }
+  if (summaryAudio) { summaryAudio.pause(); summaryAudio = null; }
   lastResult = null;
   isPlayingExplain = false;
   const ui = el("url-input"); if (ui) ui.value = "";

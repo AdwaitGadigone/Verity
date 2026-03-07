@@ -670,16 +670,51 @@ a:hover {
   flex: 1;
 }
 
+.neutral-summary-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.summary-speak-btn,
+.summary-stop-btn,
 .neutral-summary-toggle {
   font-size: 12px;
   font-weight: 600;
-  color: var(--green);
-  background: none;
-  border: 1.5px solid var(--green);
   border-radius: 12px;
   padding: 3px 12px;
   cursor: pointer;
   transition: background 0.15s, color 0.15s;
+  border: 1.5px solid var(--green);
+}
+
+.summary-speak-btn {
+  background: var(--green);
+  color: #fff;
+}
+
+.summary-speak-btn:hover:not(:disabled) {
+  background: var(--green-dark, #1a6b3a);
+}
+
+.summary-speak-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.summary-stop-btn {
+  background: #dc3545;
+  color: #fff;
+  border-color: #dc3545;
+}
+
+.summary-stop-btn:hover {
+  background: #b02a37;
+}
+
+.neutral-summary-toggle {
+  color: var(--green);
+  background: none;
 }
 
 .neutral-summary-toggle:hover {
