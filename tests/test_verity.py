@@ -561,6 +561,43 @@ class TestFlaskRoutes:
         self.app.ELEVENLABS_API_KEY = original
         assert resp.status_code == 503
 
+    def test_speak_summary_text_no_key_returns_503(self):
+        """Summary TTS uses the same /speak route — 503 without API key."""
+        original = self.app.ELEVENLABS_API_KEY
+        self.app.ELEVENLABS_API_KEY = None
+        summary_text = (
+            "Israel struck fuel storage facilities in Tehran on Thursday.\n\n"
+            "The Israeli military confirmed the strikes via official statement.\n\n"
+            "Iranian President Pezeshkian condemned the attacks."
+        )
+        resp = self.client.post("/speak",
+                                data=json.dumps({"text": summary_text}),
+                                content_type="application/json")
+        self.app.ELEVENLABS_API_KEY = original
+        assert resp.status_code == 503
+
+    def test_speak_empty_text_handled(self):
+        """Empty text to /speak returns 400 or 503 (not 500 crash)."""
+        original = self.app.ELEVENLABS_API_KEY
+        self.app.ELEVENLABS_API_KEY = None
+        resp = self.client.post("/speak",
+                                data=json.dumps({"text": ""}),
+                                content_type="application/json")
+        self.app.ELEVENLABS_API_KEY = original
+        assert resp.status_code in (400, 503)
+
+    def test_speak_accepts_long_summary_text(self):
+        """Long summary text (multi-paragraph) doesn't cause /speak to error before TTS."""
+        original = self.app.ELEVENLABS_API_KEY
+        self.app.ELEVENLABS_API_KEY = None
+        long_text = "Para. " * 200  # ~1200 chars — typical summary length
+        resp = self.client.post("/speak",
+                                data=json.dumps({"text": long_text}),
+                                content_type="application/json")
+        self.app.ELEVENLABS_API_KEY = original
+        # Without key → 503. The point is it doesn't 500 before even hitting ElevenLabs.
+        assert resp.status_code == 503
+
     def test_explain_no_key_returns_503(self):
         original = self.app.ELEVENLABS_API_KEY
         self.app.ELEVENLABS_API_KEY = None
