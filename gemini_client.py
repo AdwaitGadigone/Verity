@@ -117,7 +117,7 @@ Return ONLY this JSON structure (no markdown, no extra text):
     "reason": "<2 sentences on whether the core claim is accurate per reputable Canadian sources>"
   }},
   "verdict_subtext": "<one sentence stating the content type and overall credibility assessment>",
-  "neutral_summary": "<4-5 paragraphs in plain, objective language with zero emotional framing. Paragraph 1: what the article claims. Paragraph 2: evidence cited (sources, data, quotes used). Paragraph 3: broader context and background. Paragraph 4: what the article omits, disputes, or leaves unverified. Paragraph 5: one-sentence plain-English takeaway. Separate paragraphs with \\n\\n. Do NOT use loaded words or the article's own emotional framing.>"
+  "neutral_summary": "<Write 6-8 paragraphs reporting ONLY what the article states, exactly as a wire service journalist would. Rules: (1) Report only facts and statements present in the article — who did what, who said what, what happened, when, where, figures/statistics mentioned. (2) Include all key quotes and attributed statements verbatim or close to verbatim. (3) Do NOT comment on what the article does or does not include. Do NOT write meta-sentences like 'the article states' or 'the article does not provide'. Do NOT analyze, editorialize, or form opinions. (4) Separate paragraphs with \\n\\n. (5) Write in plain past tense, third person, neutral wire-service style — like Reuters or AP would rewrite this story.>"
 }}"""
 
     result = call_gemini(prompt)
