@@ -1,0 +1,9 @@
+flask
+google-generativeai
+python-whois
+newspaper4k
+beautifulsoup4
+requests
+python-dotenv
+elevenlabs
+flask-cors
