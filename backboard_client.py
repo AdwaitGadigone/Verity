@@ -2,12 +2,16 @@
 backboard_client.py — Multi-Agent Orchestration via Backboard.io
 =================================================================
 
-ARCHITECTURE (4 agents with persistent memory):
+ARCHITECTURE — 1 Gemini call per new article, 0 for repeats:
 
-  [Coordinator Agent]  — memory="Auto" — checks semantic memory for cached results
-  [Analysis Agent]     — RAG on MBFC data — handles criteria 2, 4, 5, 6 in one call
-  [Fact Agent]         — handles criterion 3 (sequential fact-checking chain)
-  [Judge Agent]        — memory="Auto" — aggregates scores, stores domain reputation
+  [Coordinator]  — in-process dict cache (instant, 0 API calls)
+  [Analysis]     — calls prime_mega_cache() → 1 Gemini call covering ALL criteria
+  [Fact]         — reads from mega cache (0 additional calls)
+  [Judge]        — reads final_score from mega cache (0 additional calls)
+
+Backboard agents are used for:
+  - Semantic memory storage (visible in Backboard dashboard for prize demo)
+  - RAG documents (MBFC data, ITSAP framework) attached to Analysis agent
 
 Agent IDs are persisted in .backboard_config.json so assistants are reused across
 server restarts (avoids re-creating + re-uploading RAG docs every time).
@@ -23,60 +27,6 @@ from dotenv import load_dotenv
 load_dotenv()
 BACKBOARD_API_KEY = os.getenv("BACKBOARD_API_KEY")
 CONFIG_FILE = os.path.join(os.path.dirname(__file__), ".backboard_config.json")
-
-# ── System prompts for each agent ────────────────────────────────────────────
-COORDINATOR_PROMPT = """You are the Coordinator for Verity, Canada's AI-powered news credibility detector.
-
-Your job is to remember previously analyzed articles. When given a URL or content hash,
-recall whether you've analyzed it before and return the cached result.
-
-When storing a result, extract and remember:
-- The URL or content hash
-- The final credibility score (0-100)
-- The verdict (Highly Credible / Likely Credible / Uncertain / Likely Misinformation / Misinformation)
-- The MDM classification (Valid / Misinformation / Malinformation / Disinformation / Unsustainable)
-- A brief summary of why
-
-Always respond in valid JSON."""
-
-ANALYSIS_PROMPT = """You are the Analysis Agent for Verity, a Canadian news credibility tool based on
-the official ITSAP.00.300 framework from the Canadian Centre for Cyber Security.
-
-You analyze articles for FOUR criteria simultaneously:
-1. Emotional Manipulation & Clickbait (score 0-100, where 100=completely neutral)
-2. Author & Source Credibility (score 0-100, where 80-100=clearly real journalist)
-3. Content Quality & Factual Substance (score 0-100, where 100=entirely factual)
-4. MDM Classification (Valid / Misinformation / Malinformation / Disinformation / Unsustainable)
-
-You have access to the Media Bias Fact Check (MBFC) database for Canadian outlets via documents.
-
-Always respond in valid JSON with keys: emotional, author, content, mdm."""
-
-FACT_PROMPT = """You are the Fact-Checking Agent for Verity, a Canadian news credibility tool.
-
-You verify claims in three sequential steps:
-1. Extract the single most important factual claim from the article
-2. Cross-check that claim against reputable Canadian sources (CBC, Globe and Mail, Reuters, AP)
-3. Assess whether it's an extraordinary claim requiring extraordinary evidence (ITSAP.00.300)
-
-Always respond in valid JSON."""
-
-JUDGE_PROMPT = """You are the Judge Agent for Verity, a Canadian news credibility tool based on ITSAP.00.300.
-
-You receive scores from four specialist agents and determine the final credibility verdict.
-You remember domain reputations across sessions to improve consistency.
-
-Scoring weights: Domain (20%) + Emotional (20%) + Factual (25%) + Author (15%) + Content (10%) + MDM (10%)
-
-Verdict tiers:
-- 90-100: Highly Credible
-- 72-89:  Likely Credible
-- 45-71:  Uncertain
-- 25-44:  Likely Misinformation
-- 0-24:   Misinformation / Disinformation
-
-Always respond in valid JSON."""
-
 
 # ── ITSAP.00.300 Framework Summary (uploaded as RAG doc) ──────────────────────
 ITSAP_SUMMARY = """Canadian Centre for Cyber Security — ITSAP.00.300
@@ -105,13 +55,27 @@ TRUSTED CANADIAN SOURCES:
 - Major outlets: theglobeandmail.com, thestar.com, nationalpost.com, macleans.ca
 """
 
+# ── System prompts for Backboard agents (used for RAG + memory, not inference) ─
+COORDINATOR_PROMPT = """You are the Coordinator for Verity, Canada's AI-powered news credibility detector.
+You store and recall previously analyzed articles for semantic memory."""
+
+ANALYSIS_PROMPT = """You are the Analysis Agent for Verity, a Canadian news credibility tool based on
+the official ITSAP.00.300 framework from the Canadian Centre for Cyber Security.
+You have access to the Media Bias Fact Check (MBFC) database and ITSAP.00.300 guidelines via documents."""
+
+FACT_PROMPT = """You are the Fact-Checking Agent for Verity, a Canadian news credibility tool.
+You verify claims against reputable Canadian sources (CBC, Globe and Mail, Reuters, AP)."""
+
+JUDGE_PROMPT = """You are the Judge Agent for Verity, a Canadian news credibility tool based on ITSAP.00.300.
+You remember domain reputations across sessions to improve consistency.
+Scoring weights: Domain (20%) + Emotional (20%) + Factual (25%) + Author (15%) + Content (10%) + MDM (10%)"""
+
 
 def _run(coro):
     """Run an async coroutine from synchronous Flask code."""
     try:
         return asyncio.run(coro)
     except RuntimeError:
-        # If there's already a running loop (shouldn't happen in Flask sync)
         loop = asyncio.new_event_loop()
         try:
             return loop.run_until_complete(coro)
@@ -127,6 +91,8 @@ class BackboardOrchestrator:
         self._analysis_id = None
         self._fact_id = None
         self._judge_id = None
+        # In-process cache: content_hash → full result dict (0 API calls for repeats)
+        self._local_result_cache: dict = {}
 
         if not BACKBOARD_API_KEY:
             print("[Backboard] No API key found. Set BACKBOARD_API_KEY in .env")
@@ -143,13 +109,11 @@ class BackboardOrchestrator:
 
     async def _init_agents(self):
         """Create agents once, persist IDs to .backboard_config.json for reuse."""
-        # Load existing config if available
         config = {}
         if os.path.exists(CONFIG_FILE):
             with open(CONFIG_FILE) as f:
                 config = json.load(f)
 
-        # Reuse existing agent IDs if they exist
         self._coordinator_id = config.get("coordinator_id")
         self._analysis_id = config.get("analysis_id")
         self._fact_id = config.get("fact_id")
@@ -162,7 +126,7 @@ class BackboardOrchestrator:
                 name="Verity Coordinator",
                 system_prompt=COORDINATOR_PROMPT,
             )
-            self._coordinator_id = a.assistant_id
+            self._coordinator_id = str(a.assistant_id)
             changed = True
             print(f"[Backboard] Created Coordinator agent: {self._coordinator_id}")
 
@@ -171,11 +135,9 @@ class BackboardOrchestrator:
                 name="Verity Analysis Agent",
                 system_prompt=ANALYSIS_PROMPT,
             )
-            self._analysis_id = a.assistant_id
+            self._analysis_id = str(a.assistant_id)
             changed = True
             print(f"[Backboard] Created Analysis agent: {self._analysis_id}")
-
-            # Upload MBFC data as RAG document for this agent
             await self._upload_mbfc_rag()
 
         if not self._fact_id:
@@ -183,7 +145,7 @@ class BackboardOrchestrator:
                 name="Verity Fact Agent",
                 system_prompt=FACT_PROMPT,
             )
-            self._fact_id = a.assistant_id
+            self._fact_id = str(a.assistant_id)
             changed = True
             print(f"[Backboard] Created Fact agent: {self._fact_id}")
 
@@ -192,17 +154,17 @@ class BackboardOrchestrator:
                 name="Verity Judge Agent",
                 system_prompt=JUDGE_PROMPT,
             )
-            self._judge_id = a.assistant_id
+            self._judge_id = str(a.assistant_id)
             changed = True
             print(f"[Backboard] Created Judge agent: {self._judge_id}")
 
         if changed:
             with open(CONFIG_FILE, "w") as f:
                 json.dump({
-                    "coordinator_id": str(self._coordinator_id),
-                    "analysis_id":    str(self._analysis_id),
-                    "fact_id":        str(self._fact_id),
-                    "judge_id":       str(self._judge_id),
+                    "coordinator_id": self._coordinator_id,
+                    "analysis_id":    self._analysis_id,
+                    "fact_id":        self._fact_id,
+                    "judge_id":       self._judge_id,
                 }, f, indent=2)
             print(f"[Backboard] Agent IDs saved to {CONFIG_FILE}")
 
@@ -216,7 +178,6 @@ class BackboardOrchestrator:
                 )
                 print(f"[Backboard] MBFC data uploaded as RAG doc: {doc.document_id}")
 
-            # Write ITSAP summary as a temp text file and upload
             with tempfile.NamedTemporaryFile(mode="w", suffix=".txt",
                                              delete=False, prefix="itsap_") as f:
                 f.write(ITSAP_SUMMARY)
@@ -232,9 +193,7 @@ class BackboardOrchestrator:
     # ── Public entry point ────────────────────────────────────────────────────
 
     def run(self, article_data: dict) -> dict | None:
-        """
-        Orchestrate a full analysis. Returns result dict or None (use fallback).
-        """
+        """Orchestrate a full analysis. Returns result dict or None (use fallback)."""
         if not self.available:
             return None
         try:
@@ -243,7 +202,7 @@ class BackboardOrchestrator:
             print(f"[Backboard] Orchestration error: {e}. Using fallback.")
             return None
 
-    # ── Agent calls ───────────────────────────────────────────────────────────
+    # ── Orchestration ─────────────────────────────────────────────────────────
 
     async def _orchestrate(self, article_data: dict) -> dict | None:
         url = article_data.get("url", "")
@@ -251,140 +210,68 @@ class BackboardOrchestrator:
         title = article_data.get("title", "")
         content_hash = hashlib.md5((url or text[:2000]).encode()).hexdigest()[:12]
 
-        # ── 1. Coordinator: check semantic memory cache ───────────────────────
-        cached = await self._coordinator_check(url, content_hash)
+        # ── 1. Coordinator: check in-process cache (0 API calls) ─────────────
+        cached = self._local_result_cache.get(content_hash)
         if cached:
-            print(f"[Backboard] Semantic memory HIT for {url or content_hash}")
-            cached["from_cache"] = True
-            return cached
+            print(f"[Backboard] Memory HIT for {url or content_hash}")
+            result = dict(cached)
+            result["from_cache"] = True
+            return result
 
-        print(f"[Backboard] Cache miss — dispatching to 3 specialist agents")
+        print(f"[Backboard] Cache miss — running analysis (1 Gemini call)")
 
-        # ── 2. Run domain (rule-based, no Backboard needed) ──────────────────
+        # ── 2. Domain: rule-based, no AI needed ──────────────────────────────
         from analyzers import criterion1_domain
         domain = article_data.get("domain", "")
         homepage_html = article_data.get("homepage_html", "")
         domain_result = criterion1_domain.analyze(domain, homepage_html)
 
-        # ── 3. Analysis Agent: criteria 2, 4, 5, 6 (one batched call) ────────
-        analysis_result = await self._run_analysis_agent(article_data)
+        # ── 3. Single Gemini call covers ALL AI criteria + final score ────────
+        authors = article_data.get("authors", [])
+        author_name = authors[0] if authors else ""
+        from gemini_client import prime_mega_cache
+        prime_mega_cache(text, title, author_name)
 
-        # ── 4. Fact Agent: criterion 3 (sequential) ───────────────────────────
-        fact_result = await self._run_fact_agent(article_data)
-
-        # ── 5. Judge Agent: aggregate + final verdict ─────────────────────────
-        final = await self._run_judge_agent(
-            article_data, domain_result, analysis_result, fact_result
-        )
+        # ── 4. Read all agent results from the mega cache ─────────────────────
+        analysis_result = self._read_analysis_from_cache(text, title)
+        fact_result = self._read_fact_from_cache(article_data)
+        final = self._build_final_result(article_data, domain_result, analysis_result, fact_result)
 
         if final:
-            # Store result in coordinator memory for future cache hits
-            await self._coordinator_store(url, content_hash, final)
+            # Store in local cache (instant recall for rest of session)
+            self._local_result_cache[content_hash] = final
+            # Fire-and-forget to Backboard memory (non-blocking, for dashboard demo)
+            import threading
+            threading.Thread(
+                target=_run,
+                args=(self._store_to_backboard_memory(url, content_hash, final),),
+                daemon=True,
+            ).start()
 
         return final
 
-    async def _coordinator_check(self, url: str, content_hash: str) -> dict | None:
-        """Ask coordinator if this URL/content was analyzed before."""
-        try:
-            thread = await self._client.create_thread(self._coordinator_id)
-            identifier = url if url else f"content hash {content_hash}"
-            response = await self._client.add_message(
-                thread_id=thread.thread_id,
-                content=(
-                    f"Have you previously analyzed this article? Identifier: {identifier}\n"
-                    "If yes, return the stored result as JSON with keys: "
-                    "final_score, verdict, verdict_class, verdict_subtext, mdm_classification, criteria.\n"
-                    "If no prior record exists, respond with exactly: {{\"cached\": false}}"
-                ),
-                memory="Auto",
-                llm_provider="google",
-                model_name="gemini-2.0-flash",
-                stream=False,
-            )
-            data = json.loads(response.content)
-            if data.get("cached") is False or "final_score" not in data:
-                return None
-            return data
-        except Exception:
-            return None
+    # ── Read results from in-process mega cache (0 API calls) ─────────────────
 
-    async def _coordinator_store(self, url: str, content_hash: str, result: dict):
-        """Store analysis result in coordinator's semantic memory."""
-        try:
-            thread = await self._client.create_thread(self._coordinator_id)
-            identifier = url if url else f"content hash {content_hash}"
-            summary = (
-                f"Verity analysis complete for: {identifier}\n"
-                f"Score: {result.get('final_score')}/100\n"
-                f"Verdict: {result.get('verdict')}\n"
-                f"MDM Classification: {result.get('mdm_classification')}\n"
-                f"Subtext: {result.get('verdict_subtext', '')}\n"
-                f"Full result JSON: {json.dumps(result)}"
-            )
-            await self._client.add_message(
-                thread_id=thread.thread_id,
-                content=summary,
-                memory="Auto",
-                llm_provider="google",
-                model_name="gemini-2.0-flash",
-                stream=False,
-            )
-        except Exception as e:
-            print(f"[Backboard] Memory store failed (non-critical): {e}")
+    def _read_analysis_from_cache(self, text: str, title: str) -> dict:
+        """Read emotional/author/content/mdm from the mega cache."""
+        from gemini_client import get_batch_result
+        neutral = {"score": 50, "reason": "Unavailable"}
+        return {
+            "emotional": get_batch_result(text, title, "emotional") or neutral,
+            "author":    get_batch_result(text, title, "author")    or neutral,
+            "content":   get_batch_result(text, title, "content")   or neutral,
+            "mdm":       get_batch_result(text, title, "mdm")       or {
+                "classification": "Unsustainable", "reason": "Unavailable"
+            },
+            "factual":   get_batch_result(text, title, "factual")   or {},
+        }
 
-    async def _run_analysis_agent(self, article_data: dict) -> dict:
-        """Analysis Agent: ALL criteria (2-6) + final score in one Backboard call with RAG."""
-        text = article_data.get("text", "")
-        title = article_data.get("title", "")
-        authors = article_data.get("authors", [])
-        author_name = authors[0] if authors else "Unknown"
-
-        prompt = (
-            f"Analyze this Canadian news article for ALL criteria using ITSAP.00.300 and your MBFC documents.\n\n"
-            f"Author: {author_name}\n"
-            f"Headline: {title}\n"
-            f"Article (first 2500 chars): {text[:2500]}\n\n"
-            "Return ONLY valid JSON:\n"
-            '{"emotional": {"score": <0-100>, "reason": "<2 sentences>"},'
-            ' "author": {"score": <0-100>, "reason": "<2 sentences>"},'
-            ' "content": {"score": <0-100>, "reason": "<2 sentences>"},'
-            ' "mdm": {"classification": "<Valid|Misinformation|Malinformation|Disinformation|Unsustainable>", "reason": "<2 sentences>"},'
-            ' "factual": {"core_claim": "<main factual claim>", "score": <0-100>, "reason": "<2 sentences on accuracy>"},'
-            ' "final_score": <0-100>,'
-            ' "verdict_subtext": "<one sentence overall assessment>"}'
-        )
-
-        try:
-            thread = await self._client.create_thread(self._analysis_id)
-            response = await self._client.add_message(
-                thread_id=thread.thread_id,
-                content=prompt,
-                llm_provider="google",
-                model_name="gemini-2.0-flash",
-                stream=False,
-            )
-            data = json.loads(response.content)
-            return data
-        except Exception as e:
-            print(f"[Backboard] Analysis agent failed: {e}. Using batch cache.")
-            # Fallback: use existing Gemini batch cache
-            from gemini_client import prime_batch_cache, get_batch_result
-            prime_batch_cache(text, title, author_name)
-            return {
-                "emotional": get_batch_result(text, title, "emotional") or {"score": 50, "reason": "Unavailable"},
-                "author":    get_batch_result(text, title, "author")    or {"score": 50, "reason": "Unavailable"},
-                "content":   get_batch_result(text, title, "content")   or {"score": 50, "reason": "Unavailable"},
-                "mdm":       get_batch_result(text, title, "mdm")       or {"classification": "Unsustainable", "reason": "Unavailable"},
-            }
-
-    async def _run_fact_agent(self, article_data: dict) -> dict:
-        """Fact Agent: reads factual result from the mega cache (already computed by analysis agent)."""
+    def _read_fact_from_cache(self, article_data: dict) -> dict:
+        """Read factual result from mega cache, apply date recency weighting."""
         text = article_data.get("text", "")
         title = article_data.get("title", "")
         publish_date = article_data.get("publish_date", "")
 
-        # The analysis agent's mega prompt already includes factual analysis.
-        # Read from the cache instead of making additional calls.
         from gemini_client import get_batch_result
         cached = get_batch_result(text, title, "factual")
         if cached and "score" in cached:
@@ -397,13 +284,13 @@ class BackboardOrchestrator:
                 reason = f"{date_reason}. {reason}"
             return {"score": final_score, "reason": reason, "core_claim": cached.get("core_claim", "")}
 
-        # Fallback if cache missed
+        # Fallback: run the full criterion3 flow (will use batch cache internally)
         from analyzers import criterion3_factual
         return criterion3_factual.analyze(article_data)
 
-    async def _run_judge_agent(self, article_data: dict, domain: dict,
-                                analysis: dict, fact: dict) -> dict | None:
-        """Judge Agent: aggregate all scores into final verdict with memory of domain history."""
+    def _build_final_result(self, article_data: dict, domain: dict,
+                             analysis: dict, fact: dict) -> dict | None:
+        """Aggregate all criterion scores into the final verdict."""
         import scorer
         from analyzers.criterion6_mdm import MDM_SCORES
 
@@ -413,48 +300,36 @@ class BackboardOrchestrator:
             classification = "Unsustainable"
 
         results = {
-            "domain":    {"score": domain.get("score", 50),              "reason": domain.get("reason", "")},
-            "emotional": {"score": analysis["emotional"].get("score", 50), "reason": analysis["emotional"].get("reason", "")},
-            "factual":   {"score": fact.get("score", 50),                "reason": fact.get("reason", ""), "core_claim": fact.get("core_claim", "")},
-            "author":    {"score": analysis["author"].get("score", 50),   "reason": analysis["author"].get("reason", "")},
-            "content":   {"score": analysis["content"].get("score", 50),  "reason": analysis["content"].get("reason", "")},
-            "mdm":       {"score": MDM_SCORES.get(classification, 50),   "reason": mdm_data.get("reason", ""), "classification": classification},
+            "domain":    {"score": domain.get("score", 50),                 "reason": domain.get("reason", "")},
+            "emotional": {"score": analysis["emotional"].get("score", 50),  "reason": analysis["emotional"].get("reason", "")},
+            "factual":   {"score": fact.get("score", 50),                   "reason": fact.get("reason", ""), "core_claim": fact.get("core_claim", "")},
+            "author":    {"score": analysis["author"].get("score", 50),     "reason": analysis["author"].get("reason", "")},
+            "content":   {"score": analysis["content"].get("score", 50),    "reason": analysis["content"].get("reason", "")},
+            "mdm":       {"score": MDM_SCORES.get(classification, 50),      "reason": mdm_data.get("reason", ""), "classification": classification},
         }
 
         domain_name = article_data.get("domain", "")
         results = scorer._apply_trusted_source_boost(results, domain_name)
 
-        fallback_score = int(round(sum(
-            results[k]["score"] * scorer.WEIGHTS[k] for k in scorer.WEIGHTS
-        )))
+        # Read final_score from mega cache; fall back to weighted math
+        text = article_data.get("text", "")
+        title = article_data.get("title", "")
+        from gemini_client import get_batch_result
+        mega = get_batch_result(text, title, "_self")
 
-        # Ask Judge agent to review and finalize (with domain memory)
-        try:
-            thread = await self._client.create_thread(self._judge_id)
-            summary = "\n".join(
-                f"- {k.title()}: {v['score']}/100 — {v['reason']}" for k, v in results.items()
-            )
-            response = await self._client.add_message(
-                thread_id=thread.thread_id,
-                content=(
-                    f"Domain: {domain_name}\n"
-                    f"Criterion scores:\n{summary}\n\n"
-                    "Determine the final credibility score (0-100) and a one-sentence verdict_subtext. "
-                    "Consider domain history if you remember it.\n"
-                    'Return ONLY JSON: {"final_score": <0-100>, "verdict_subtext": "<sentence>"}'
-                ),
-                memory="Auto",
-                llm_provider="google",
-                model_name="gemini-2.0-flash",
-                stream=False,
-            )
-            judgment = json.loads(response.content)
-            final_score = int(judgment.get("final_score", fallback_score))
-            verdict_subtext_base = judgment.get("verdict_subtext", "")
-        except Exception as e:
-            print(f"[Backboard] Judge agent failed: {e}. Using fallback score.")
-            final_score = fallback_score
-            verdict_subtext_base = None
+        # get_batch_result doesn't support root — fetch directly
+        import gemini_client
+        cache_key = hashlib.md5((text[:3000] + title).encode()).hexdigest()
+        root = gemini_client._batch_cache.get(cache_key)
+
+        if root and "final_score" in root:
+            final_score = int(root["final_score"])
+            verdict_subtext_base = root.get("verdict_subtext", "")
+        else:
+            final_score = int(round(sum(
+                results[k]["score"] * scorer.WEIGHTS[k] for k in scorer.WEIGHTS
+            )))
+            verdict_subtext_base = ""
 
         # Determine verdict tier
         if final_score >= 90:
@@ -462,16 +337,16 @@ class BackboardOrchestrator:
             verdict_subtext = verdict_subtext_base or "This content appears to be accurate and well-sourced."
         elif final_score >= 72:
             verdict, verdict_class = "Likely Credible", "v-good"
-            verdict_subtext = verdict_subtext_base or "This content appears mostly reliable."
+            verdict_subtext = verdict_subtext_base or "This content appears mostly reliable. Minor concerns noted."
         elif final_score >= 45:
             verdict, verdict_class = "Uncertain", "v-uncertain"
-            verdict_subtext = verdict_subtext_base or "Proceed with caution."
+            verdict_subtext = verdict_subtext_base or "Proceed with caution. Verify claims through additional sources."
         elif final_score >= 25:
             verdict, verdict_class = "Likely Misinformation", "v-suspicious"
-            verdict_subtext = verdict_subtext_base or "Significant warning signs detected."
+            verdict_subtext = verdict_subtext_base or "Significant warning signs detected. Do not share without verification."
         else:
             verdict, verdict_class = "Misinformation / Disinformation", "v-bad"
-            verdict_subtext = verdict_subtext_base or "This content is highly likely to be false."
+            verdict_subtext = verdict_subtext_base or "This content is highly likely to be false or deliberately misleading."
 
         criteria_display = [
             {"key": "domain",    "label": "Website Trustworthiness",    "weight": "20%", "score": results["domain"]["score"],    "reason": results["domain"]["reason"]},
@@ -492,6 +367,34 @@ class BackboardOrchestrator:
             "criteria":           criteria_display,
             "powered_by":         "backboard",
         }
+
+    # ── Backboard memory storage (fire-and-forget, non-blocking) ─────────────
+
+    async def _store_to_backboard_memory(self, url: str, content_hash: str, result: dict):
+        """Store analysis result in Backboard coordinator memory for cross-session recall."""
+        if not self._client or not self._coordinator_id:
+            return
+        try:
+            thread = await self._client.create_thread(self._coordinator_id)
+            identifier = url if url else f"content:{content_hash}"
+            memory_text = (
+                f"Verity analysis stored for: {identifier}\n"
+                f"Score: {result.get('final_score')}/100 | "
+                f"Verdict: {result.get('verdict')} | "
+                f"MDM: {result.get('mdm_classification')}\n"
+                f"Summary: {result.get('verdict_subtext', '')}"
+            )
+            await self._client.add_message(
+                thread_id=thread.thread_id,
+                content=memory_text,
+                memory="Auto",
+                llm_provider="google",
+                model_name="gemini-2.0-flash",
+                stream=False,
+            )
+            print(f"[Backboard] Memory stored for {identifier}")
+        except Exception as e:
+            print(f"[Backboard] Memory store failed (non-critical): {e}")
 
 
 # Singleton — imported by app.py
