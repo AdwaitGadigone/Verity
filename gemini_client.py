@@ -182,7 +182,7 @@ def _call_grok(prompt: str) -> dict | None:
             messages=[{"role": "user", "content": prompt}],
             response_format={"type": "json_object"},
             temperature=0.1,
-            max_tokens=1024,
+            max_tokens=4096,
         )
         return json.loads(response.choices[0].message.content)
     except json.JSONDecodeError:
