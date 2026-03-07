@@ -67,35 +67,33 @@ class TestBatchCache:
         result = get_batch_result("some text", "some title", "emotional")
         assert result is None
 
-    def test_prime_batch_cache_stores_result(self):
-        from gemini_client import prime_batch_cache, get_batch_result, _batch_cache
-
-        fake_batch = {
-            "emotional": {"score": 85, "reason": "Neutral tone"},
+    def _make_fake_mega(self, emotional_score=85, mdm="Valid"):
+        return {
+            "emotional": {"score": emotional_score, "reason": "Neutral tone"},
             "author":    {"score": 75, "reason": "Named journalist"},
             "content":   {"score": 80, "reason": "Factual content"},
-            "mdm":       {"classification": "Valid", "reason": "Accurate"},
+            "mdm":       {"classification": mdm, "reason": "Accurate"},
+            "factual":   {"core_claim": "Test claim", "score": 80, "reason": "Confirmed"},
+            "final_score": 82,
+            "verdict_subtext": "Reliable reporting.",
         }
 
-        with patch("gemini_client.call_gemini", return_value=fake_batch):
+    def test_prime_batch_cache_stores_result(self):
+        from gemini_client import prime_batch_cache, get_batch_result
+
+        with patch("gemini_client.call_gemini", return_value=self._make_fake_mega()):
             success = prime_batch_cache("article text", "headline", "John Doe")
 
         assert success is True
-        assert get_batch_result("article text", "headline", "emotional") == {"score": 85, "reason": "Neutral tone"}
+        assert get_batch_result("article text", "headline", "emotional")["score"] == 85
         assert get_batch_result("article text", "headline", "mdm")["classification"] == "Valid"
+        assert get_batch_result("article text", "headline", "factual")["core_claim"] == "Test claim"
 
     def test_prime_batch_cache_is_idempotent(self):
         """Calling prime_batch_cache twice with same content only calls Gemini once."""
         from gemini_client import prime_batch_cache
 
-        fake_batch = {
-            "emotional": {"score": 70, "reason": "OK"},
-            "author":    {"score": 70, "reason": "OK"},
-            "content":   {"score": 70, "reason": "OK"},
-            "mdm":       {"classification": "Valid", "reason": "OK"},
-        }
-
-        with patch("gemini_client.call_gemini", return_value=fake_batch) as mock_gemini:
+        with patch("gemini_client.call_gemini", return_value=self._make_fake_mega()) as mock_gemini:
             prime_batch_cache("same text", "same title", "author")
             prime_batch_cache("same text", "same title", "author")
 
@@ -104,12 +102,9 @@ class TestBatchCache:
     def test_cache_key_differs_by_content(self):
         from gemini_client import prime_batch_cache, get_batch_result
 
-        batch_a = {"emotional": {"score": 90, "reason": "A"}, "author": {"score": 90, "reason": "A"}, "content": {"score": 90, "reason": "A"}, "mdm": {"classification": "Valid", "reason": "A"}}
-        batch_b = {"emotional": {"score": 10, "reason": "B"}, "author": {"score": 10, "reason": "B"}, "content": {"score": 10, "reason": "B"}, "mdm": {"classification": "Disinformation", "reason": "B"}}
-
-        with patch("gemini_client.call_gemini", return_value=batch_a):
+        with patch("gemini_client.call_gemini", return_value=self._make_fake_mega(emotional_score=90)):
             prime_batch_cache("text A", "title A", "")
-        with patch("gemini_client.call_gemini", return_value=batch_b):
+        with patch("gemini_client.call_gemini", return_value=self._make_fake_mega(emotional_score=10)):
             prime_batch_cache("text B", "title B", "")
 
         assert get_batch_result("text A", "title A", "emotional")["score"] == 90
@@ -309,6 +304,9 @@ class TestCriterion6MDM:
             "author":    {"score": 70, "reason": "ok"},
             "content":   {"score": 70, "reason": "ok"},
             "mdm":       {"classification": "Disinformation", "reason": "clearly false"},
+            "factual":   {"core_claim": "claim", "score": 20, "reason": "false"},
+            "final_score": 15,
+            "verdict_subtext": "Disinformation detected.",
         }
         with patch("gemini_client.call_gemini", return_value=fake_batch):
             from gemini_client import prime_batch_cache

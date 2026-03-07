@@ -53,56 +53,69 @@ load_dotenv()
 _batch_cache: dict = {}
 
 
-def prime_batch_cache(article_text: str, title: str, author_name: str) -> bool:
+def prime_mega_cache(article_text: str, title: str, author_name: str) -> bool:
     """
-    Makes ONE Gemini call that covers the AI-analysis portions of criteria
-    2 (emotional), 4 (author), 5 (content), and 6 (MDM) simultaneously.
+    Makes ONE Gemini call that covers ALL AI-analysis for criteria 2-6 AND
+    produces the final score — replacing what was previously 5 separate calls.
 
-    Call this from scorer.py BEFORE launching the criterion threads.
-    Each criterion's Gemini sub-function will then read from _batch_cache
-    instead of making its own API call.
+    Covers:
+      - Criteria 2 (emotional), 4 (author), 5 (content), 6 (MDM)
+      - Criterion 3 (factual): claim extraction + verification + extraordinary test
+      - Final credibility score + verdict subtext
 
+    Call this from scorer.py once before running any criteria.
     Returns True if the cache was successfully populated.
     """
     cache_key = hashlib.md5((article_text[:3000] + title).encode()).hexdigest()
     if cache_key in _batch_cache:
-        return True  # Already cached (e.g. same URL submitted twice)
+        return True  # Same content already analyzed
 
     sample = f"HEADLINE: {title}\n\nARTICLE (first 2500 chars):\n{article_text[:2500]}"
-    author_info = f'Author name: "{author_name}"' if author_name else "No named author."
+    author_info = f'Author: "{author_name}"' if author_name else "No named author."
 
-    prompt = f"""You are a Canadian misinformation analysis AI. Analyze the following article for four criteria simultaneously and return a single JSON object.
+    prompt = f"""You are an expert Canadian misinformation analyst using the ITSAP.00.300 framework from the Canadian Centre for Cyber Security. Analyze the article below and return a single JSON object covering ALL criteria.
 
 {author_info}
-
 {sample}
 
-Return ONLY valid JSON with this exact structure:
+Return ONLY this JSON structure (no markdown, no extra text):
 {{
   "emotional": {{
-    "score": <0-100, where 100=completely neutral/factual, 0=extremely manipulative>,
-    "reason": "<2-3 sentences on emotional tone, fear-mongering, or clickbait language>"
+    "score": <0-100, 100=completely neutral, 0=extremely manipulative>,
+    "reason": "<2 sentences on emotional tone and clickbait>"
   }},
   "author": {{
-    "score": <0-100, where 80-100=clearly real journalist, 0-49=appears fake or pseudonym>,
-    "reason": "<2-3 sentences assessing whether this is a real, identifiable journalist>"
+    "score": <0-100, 80-100=clearly real journalist, 0-49=fake/pseudonym>,
+    "reason": "<2 sentences on author credibility>"
   }},
   "content": {{
-    "score": <0-100, where 100=entirely factual with concrete data, 0=pure emotional appeal>,
-    "reason": "<2-3 sentences on the factual vs emotional content balance>"
+    "score": <0-100, 100=entirely factual with data, 0=pure emotional appeal>,
+    "reason": "<2 sentences on factual vs emotional balance>"
   }},
   "mdm": {{
-    "classification": "<exactly one of: Valid, Misinformation, Malinformation, Disinformation, Unsustainable>",
-    "reason": "<2-3 sentences explaining the MDM classification per ITSAP.00.300>"
-  }}
+    "classification": "<one of: Valid, Misinformation, Malinformation, Disinformation, Unsustainable>",
+    "reason": "<2 sentences explaining the ITSAP.00.300 classification>"
+  }},
+  "factual": {{
+    "core_claim": "<the single most important factual claim in one sentence, or empty string>",
+    "score": <0-100, 90-100=confirmed by multiple reliable sources, 0-29=contradicted by sources>,
+    "reason": "<2 sentences on whether the core claim is accurate per reputable Canadian sources>"
+  }},
+  "final_score": <0-100 overall credibility>,
+  "verdict_subtext": "<one sentence stating the content type and overall credibility assessment>"
 }}"""
 
     result = call_gemini(prompt)
-    if result and all(k in result for k in ("emotional", "author", "content", "mdm")):
-        result["_key"] = cache_key
+    required = ("emotional", "author", "content", "mdm", "factual", "final_score")
+    if result and all(k in result for k in required):
         _batch_cache[cache_key] = result
         return True
     return False
+
+
+# Keep old name as alias so existing tests/code doesn't break
+def prime_batch_cache(article_text: str, title: str, author_name: str) -> bool:
+    return prime_mega_cache(article_text, title, author_name)
 
 
 def get_batch_result(article_text: str, title: str, analysis_type: str) -> dict | None:
