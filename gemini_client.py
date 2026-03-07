@@ -156,29 +156,39 @@ try:
 except ImportError:
     print("[WARNING] google-genai not installed. Run: pip install google-genai")
 
-# ── Set up Grok fallback client (xAI, OpenAI-compatible API) ─────────────────
-# When all Gemini quota is exhausted, call_gemini() automatically falls back to
-# Grok. Add GROK_API_KEY to .env to enable this.
+# ── Set up Groq fallback client (free tier, llama-3.3-70b) ───────────────────
+# Groq has a generous free quota. Add GROQ_API_KEY to .env to enable.
+_groq_client = None
+try:
+    _groq_key = os.getenv("GROQ_API_KEY", "").strip()
+    if _groq_key:
+        from openai import OpenAI as _OpenAI
+        _groq_client = _OpenAI(api_key=_groq_key, base_url="https://api.groq.com/openai/v1")
+        print("[Groq] Fallback client ready (llama-3.3-70b-versatile).")
+except ImportError:
+    print("[Groq] openai package not installed. Run: pip install openai")
+except Exception as e:
+    print(f"[Groq] Client init failed: {e}")
+
+# ── Set up Grok fallback client (xAI, paid) ───────────────────────────────────
 _grok_client = None
 try:
     _grok_key = os.getenv("GROK_API_KEY", "").strip()
     if _grok_key:
-        from openai import OpenAI
-        _grok_client = OpenAI(api_key=_grok_key, base_url="https://api.x.ai/v1")
-        print("[Grok] Fallback client ready (xAI grok-2-1212).")
-except ImportError:
-    print("[Grok] openai package not installed. Run: pip install openai")
+        from openai import OpenAI as _OpenAI
+        _grok_client = _OpenAI(api_key=_grok_key, base_url="https://api.x.ai/v1")
+        print("[Grok] Fallback client ready (xAI).")
 except Exception as e:
     print(f"[Grok] Client init failed: {e}")
 
 
-def _call_grok(prompt: str) -> dict | None:
-    """Call Grok (xAI) as a fallback when Gemini quota is exhausted."""
-    if not _grok_client:
+def _call_openai_compatible(client, model: str, prompt: str) -> dict | None:
+    """Shared helper for OpenAI-compatible providers (Groq, Grok)."""
+    if not client:
         return None
     try:
-        response = _grok_client.chat.completions.create(
-            model="grok-2-1212",
+        response = client.chat.completions.create(
+            model=model,
             messages=[{"role": "user", "content": prompt}],
             response_format={"type": "json_object"},
             temperature=0.1,
@@ -188,7 +198,7 @@ def _call_grok(prompt: str) -> dict | None:
     except json.JSONDecodeError:
         return None
     except Exception as e:
-        print(f"[Grok error] {e}")
+        print(f"[{model}] error: {e}")
         return None
 
 
@@ -226,10 +236,16 @@ def call_gemini(prompt: str, model: str = "gemini-2.0-flash") -> dict | None:
                 print(f"[Gemini error] {e}")
                 return None
 
-    # ── All Gemini keys exhausted — try Grok ─────────────────────────────────
+    # ── All Gemini keys exhausted — try Groq (free) then Grok (paid) ─────────
+    if _groq_client:
+        print("[Gemini] All keys exhausted. Falling back to Groq...")
+        result = _call_openai_compatible(_groq_client, "llama-3.3-70b-versatile", prompt)
+        if result is not None:
+            return result
+
     if _grok_client:
-        print("[Gemini] All keys exhausted. Falling back to Grok...")
-        return _call_grok(prompt)
+        print("[Groq] Failed. Falling back to Grok...")
+        return _call_openai_compatible(_grok_client, "grok-2-latest", prompt)
 
     print("[AI] All providers exhausted. No result available.")
     return None

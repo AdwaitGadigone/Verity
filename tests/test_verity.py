@@ -67,8 +67,8 @@ class TestBatchCache:
         result = get_batch_result("some text", "some title", "emotional")
         assert result is None
 
-    def _make_fake_mega(self, emotional_score=85, mdm="Valid"):
-        return {
+    def _make_fake_mega(self, emotional_score=85, mdm="Valid", include_summary=True):
+        base = {
             "emotional": {"score": emotional_score, "reason": "Neutral tone"},
             "author":    {"score": 75, "reason": "Named journalist"},
             "content":   {"score": 80, "reason": "Factual content"},
@@ -77,6 +77,15 @@ class TestBatchCache:
             "final_score": 82,
             "verdict_subtext": "Reliable reporting.",
         }
+        if include_summary:
+            base["neutral_summary"] = (
+                "The article reports on a new federal housing policy.\n\n"
+                "The government cites Statistics Canada data showing an 8% rise in homelessness.\n\n"
+                "The policy aims to reduce housing costs by 15%.\n\n"
+                "No independent verification of the 15% figure is provided.\n\n"
+                "Overall, this is a government policy announcement with limited external sourcing."
+            )
+        return base
 
     def test_prime_batch_cache_stores_result(self):
         from gemini_client import prime_batch_cache, get_batch_result
@@ -109,6 +118,109 @@ class TestBatchCache:
 
         assert get_batch_result("text A", "title A", "emotional")["score"] == 90
         assert get_batch_result("text B", "title B", "emotional")["score"] == 10
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# NEUTRAL SUMMARY — generation and pass-through tests
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestNeutralSummary:
+    def setup_method(self):
+        import gemini_client
+        gemini_client._batch_cache.clear()
+
+    def _make_fake_mega_with_summary(self):
+        return {
+            "emotional": {"score": 85, "reason": "Neutral tone"},
+            "author":    {"score": 75, "reason": "Named journalist"},
+            "content":   {"score": 80, "reason": "Factual content"},
+            "mdm":       {"classification": "Valid", "reason": "Accurate"},
+            "factual":   {"core_claim": "Test claim", "score": 80, "reason": "Confirmed"},
+            "final_score": 82,
+            "verdict_subtext": "Reliable reporting.",
+            "neutral_summary": (
+                "The article reports on a government housing policy.\n\n"
+                "Evidence cited includes Statistics Canada data.\n\n"
+                "Context: homelessness has risen 8% since 2020.\n\n"
+                "The article does not include independent expert verification.\n\n"
+                "This is a straightforward policy announcement with limited external sourcing."
+            ),
+        }
+
+    def test_neutral_summary_stored_in_cache(self):
+        """neutral_summary is stored in batch cache when AI returns it."""
+        from gemini_client import prime_mega_cache, get_batch_result
+        import gemini_client, hashlib
+
+        with patch("gemini_client.call_gemini", return_value=self._make_fake_mega_with_summary()):
+            prime_mega_cache("article text", "headline", "John Doe")
+
+        cache_key = hashlib.md5(("article text"[:3000] + "headline").encode()).hexdigest()
+        cached = gemini_client._batch_cache.get(cache_key)
+        assert cached is not None
+        assert "neutral_summary" in cached
+        assert "housing policy" in cached["neutral_summary"]
+
+    def test_neutral_summary_in_scorer_result(self):
+        """scorer.run_all() passes neutral_summary through to the result dict."""
+        import scorer, gemini_client, hashlib
+
+        fake_mega = self._make_fake_mega_with_summary()
+        cache_key = hashlib.md5((FAKE_ARTICLE["text"][:3000] + FAKE_ARTICLE["title"]).encode()).hexdigest()
+        gemini_client._batch_cache[cache_key] = fake_mega
+
+        with patch("gemini_client.call_gemini", return_value=fake_mega):
+            result = scorer.run_all(FAKE_ARTICLE)
+
+        assert "neutral_summary" in result
+        assert len(result["neutral_summary"]) > 0
+
+    def test_neutral_summary_empty_when_ai_fails(self):
+        """When AI call fails, neutral_summary is empty string (not missing)."""
+        import scorer, gemini_client
+        gemini_client._batch_cache.clear()
+
+        with patch("gemini_client.call_gemini", return_value=None):
+            result = scorer.run_all(FAKE_ARTICLE)
+
+        assert "neutral_summary" in result
+        assert result["neutral_summary"] == ""
+
+    def test_neutral_summary_has_multiple_paragraphs(self):
+        """The summary contains paragraph breaks (\\n\\n separators)."""
+        from gemini_client import prime_mega_cache, get_batch_result
+        import gemini_client, hashlib
+
+        with patch("gemini_client.call_gemini", return_value=self._make_fake_mega_with_summary()):
+            prime_mega_cache("article text", "headline", "John Doe")
+
+        cache_key = hashlib.md5(("article text"[:3000] + "headline").encode()).hexdigest()
+        summary = gemini_client._batch_cache[cache_key]["neutral_summary"]
+        paragraphs = [p for p in summary.split("\n\n") if p.strip()]
+        assert len(paragraphs) >= 4
+
+    def test_neutral_summary_missing_from_ai_response_gracefully_handled(self):
+        """If AI returns valid JSON without neutral_summary, scorer still works."""
+        import scorer, gemini_client, hashlib
+
+        # Mega response without neutral_summary key
+        fake_mega_no_summary = {
+            "emotional": {"score": 85, "reason": "Neutral"},
+            "author":    {"score": 75, "reason": "Named"},
+            "content":   {"score": 80, "reason": "Factual"},
+            "mdm":       {"classification": "Valid", "reason": "Accurate"},
+            "factual":   {"core_claim": "Claim", "score": 80, "reason": "Confirmed"},
+            "final_score": 82,
+            "verdict_subtext": "Reliable.",
+        }
+        cache_key = hashlib.md5((FAKE_ARTICLE["text"][:3000] + FAKE_ARTICLE["title"]).encode()).hexdigest()
+        gemini_client._batch_cache[cache_key] = fake_mega_no_summary
+
+        with patch("gemini_client.call_gemini", return_value=fake_mega_no_summary):
+            result = scorer.run_all(FAKE_ARTICLE)
+
+        assert result["neutral_summary"] == ""
+        assert result["final_score"] > 0  # Rest of analysis still works
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
