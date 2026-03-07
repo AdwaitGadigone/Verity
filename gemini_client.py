@@ -75,6 +75,21 @@ def prime_mega_cache(article_text: str, title: str, author_name: str) -> bool:
 
     prompt = f"""You are an expert Canadian misinformation analyst using the ITSAP.00.300 framework from the Canadian Centre for Cyber Security. Analyze the article below and return a single JSON object covering ALL criteria.
 
+TRUSTED CANADIAN SOURCES (score these highly — they are institutional, credible outlets):
+- Government: canada.ca, gc.ca, cyber.gc.ca, statcan.gc.ca, healthcanada.gc.ca, parl.gc.ca
+- Public broadcasters: cbc.ca, radio-canada.ca
+- Major newspapers: theglobeandmail.com, thestar.com, nationalpost.com, macleans.ca, globalnews.ca
+- Wire services: reuters.com, apnews.com, afp.com
+For these sources: emotional score should be 75+, author score 80+, MDM classification should be "Valid" unless there is explicit factual error.
+
+MDM CLASSIFICATION GUIDE (ITSAP.00.300):
+- Valid: Factually accurate reporting from a credible source, even if covering controversial topics
+- Misinformation: Contains specific factual errors NOT intentional (e.g. wrong statistics cited)
+- Malinformation: Factually true but framed to mislead or harm (e.g. selective quoting)
+- Disinformation: Deliberately fabricated content designed to deceive
+- Unsustainable: Claims that cannot be verified or disproved with available information
+NOTE: War/conflict reporting from established outlets is typically "Valid" or "Unsustainable", NOT "Misinformation".
+
 {author_info}
 {sample}
 
@@ -101,12 +116,12 @@ Return ONLY this JSON structure (no markdown, no extra text):
     "score": <0-100, 90-100=confirmed by multiple reliable sources, 0-29=contradicted by sources>,
     "reason": "<2 sentences on whether the core claim is accurate per reputable Canadian sources>"
   }},
-  "final_score": <0-100 overall credibility>,
-  "verdict_subtext": "<one sentence stating the content type and overall credibility assessment>"
+  "verdict_subtext": "<one sentence stating the content type and overall credibility assessment>",
+  "neutral_summary": "<Write 6-8 paragraphs reporting ONLY what the article states, exactly as a wire service journalist would. Rules: (1) Report only facts and statements present in the article — who did what, who said what, what happened, when, where, figures/statistics mentioned. (2) Include all key quotes and attributed statements verbatim or close to verbatim. (3) Do NOT comment on what the article does or does not include. Do NOT write meta-sentences like 'the article states' or 'the article does not provide'. Do NOT analyze, editorialize, or form opinions. (4) Separate paragraphs with \\n\\n. (5) Write in plain past tense, third person, neutral wire-service style — like Reuters or AP would rewrite this story.>"
 }}"""
 
     result = call_gemini(prompt)
-    required = ("emotional", "author", "content", "mdm", "factual", "final_score")
+    required = ("emotional", "author", "content", "mdm", "factual")
     if result and all(k in result for k in required):
         _batch_cache[cache_key] = result
         return True
@@ -155,39 +170,49 @@ try:
 except ImportError:
     print("[WARNING] google-genai not installed. Run: pip install google-genai")
 
-# ── Set up Grok fallback client (xAI, OpenAI-compatible API) ─────────────────
-# When all Gemini quota is exhausted, call_gemini() automatically falls back to
-# Grok. Add GROK_API_KEY to .env to enable this.
+# ── Set up Groq fallback client (free tier, llama-3.3-70b) ───────────────────
+# Groq has a generous free quota. Add GROQ_API_KEY to .env to enable.
+_groq_client = None
+try:
+    _groq_key = os.getenv("GROQ_API_KEY", "").strip()
+    if _groq_key:
+        from openai import OpenAI as _OpenAI
+        _groq_client = _OpenAI(api_key=_groq_key, base_url="https://api.groq.com/openai/v1")
+        print("[Groq] Fallback client ready (llama-3.3-70b-versatile).")
+except ImportError:
+    print("[Groq] openai package not installed. Run: pip install openai")
+except Exception as e:
+    print(f"[Groq] Client init failed: {e}")
+
+# ── Set up Grok fallback client (xAI, paid) ───────────────────────────────────
 _grok_client = None
 try:
     _grok_key = os.getenv("GROK_API_KEY", "").strip()
     if _grok_key:
-        from openai import OpenAI
-        _grok_client = OpenAI(api_key=_grok_key, base_url="https://api.x.ai/v1")
-        print("[Grok] Fallback client ready (xAI grok-2-1212).")
-except ImportError:
-    print("[Grok] openai package not installed. Run: pip install openai")
+        from openai import OpenAI as _OpenAI
+        _grok_client = _OpenAI(api_key=_grok_key, base_url="https://api.x.ai/v1")
+        print("[Grok] Fallback client ready (xAI).")
 except Exception as e:
     print(f"[Grok] Client init failed: {e}")
 
 
-def _call_grok(prompt: str) -> dict | None:
-    """Call Grok (xAI) as a fallback when Gemini quota is exhausted."""
-    if not _grok_client:
+def _call_openai_compatible(client, model: str, prompt: str) -> dict | None:
+    """Shared helper for OpenAI-compatible providers (Groq, Grok)."""
+    if not client:
         return None
     try:
-        response = _grok_client.chat.completions.create(
-            model="grok-2-1212",
+        response = client.chat.completions.create(
+            model=model,
             messages=[{"role": "user", "content": prompt}],
             response_format={"type": "json_object"},
             temperature=0.1,
-            max_tokens=1024,
+            max_tokens=4096,
         )
         return json.loads(response.choices[0].message.content)
     except json.JSONDecodeError:
         return None
     except Exception as e:
-        print(f"[Grok error] {e}")
+        print(f"[{model}] error: {e}")
         return None
 
 
@@ -208,7 +233,7 @@ def call_gemini(prompt: str, model: str = "gemini-2.0-flash") -> dict | None:
                 config=genai_types.GenerateContentConfig(
                     response_mime_type="application/json",
                     temperature=0.1,
-                    max_output_tokens=1024,
+                    max_output_tokens=2048,
                 ),
             )
             return json.loads(response.text)
@@ -225,10 +250,16 @@ def call_gemini(prompt: str, model: str = "gemini-2.0-flash") -> dict | None:
                 print(f"[Gemini error] {e}")
                 return None
 
-    # ── All Gemini keys exhausted — try Grok ─────────────────────────────────
+    # ── All Gemini keys exhausted — try Groq (free) then Grok (paid) ─────────
+    if _groq_client:
+        print("[Gemini] All keys exhausted. Falling back to Groq...")
+        result = _call_openai_compatible(_groq_client, "llama-3.3-70b-versatile", prompt)
+        if result is not None:
+            return result
+
     if _grok_client:
-        print("[Gemini] All keys exhausted. Falling back to Grok...")
-        return _call_grok(prompt)
+        print("[Groq] Failed. Falling back to Grok...")
+        return _call_openai_compatible(_grok_client, "grok-2-latest", prompt)
 
     print("[AI] All providers exhausted. No result available.")
     return None

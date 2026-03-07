@@ -145,6 +145,10 @@ async function runAnalysis() {
 // ══════════════════════════════════════════════════════════════════
 function renderResults(data) {
 
+  // ── Cache badge (from Backboard memory) ──────────────────────
+  const cacheBadge = el("cache-badge");
+  if (cacheBadge) cacheBadge.style.display = data.from_cache ? "block" : "none";
+
   // ── Article title ────────────────────────────────────────────
   const titleEl = el("result-article-title");
   if (titleEl) {
@@ -213,6 +217,24 @@ function renderResults(data) {
       bar.style.width = bar.dataset.width;
     });
   }, 80);
+
+  // ── Neutral summary ───────────────────────────────────────────
+  const summarySection = el("neutral-summary-section");
+  const summaryBody = el("neutral-summary-body");
+  if (summarySection && summaryBody) {
+    if (data.neutral_summary) {
+      // Split on double newlines into paragraphs
+      const paragraphs = data.neutral_summary.split(/\n\n+/).filter(p => p.trim());
+      summaryBody.innerHTML = paragraphs.map(p => "<p>" + esc(p.trim()) + "</p>").join("");
+      summarySection.style.display = "block";
+      // Reset toggle to "expanded" state on each new result
+      summaryBody.style.display = "block";
+      const toggleBtn = el("summary-toggle-btn");
+      if (toggleBtn) toggleBtn.textContent = "Hide";
+    } else {
+      summarySection.style.display = "none";
+    }
+  }
 
   // ── Reset voice buttons ───────────────────────────────────────
   const stopBtn = el("stop-btn");
@@ -451,6 +473,19 @@ async function loadHistory() {
   } catch (_) {
     // History is non-critical — silently ignore errors
   }
+}
+
+
+// ══════════════════════════════════════════════════════════════════
+// NEUTRAL SUMMARY TOGGLE
+// ══════════════════════════════════════════════════════════════════
+function toggleSummary() {
+  const body = el("neutral-summary-body");
+  const btn = el("summary-toggle-btn");
+  if (!body || !btn) return;
+  const isVisible = body.style.display !== "none";
+  body.style.display = isVisible ? "none" : "block";
+  btn.textContent = isVisible ? "Show" : "Hide";
 }
 
 

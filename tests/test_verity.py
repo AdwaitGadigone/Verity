@@ -67,8 +67,8 @@ class TestBatchCache:
         result = get_batch_result("some text", "some title", "emotional")
         assert result is None
 
-    def _make_fake_mega(self, emotional_score=85, mdm="Valid"):
-        return {
+    def _make_fake_mega(self, emotional_score=85, mdm="Valid", include_summary=True):
+        base = {
             "emotional": {"score": emotional_score, "reason": "Neutral tone"},
             "author":    {"score": 75, "reason": "Named journalist"},
             "content":   {"score": 80, "reason": "Factual content"},
@@ -77,6 +77,15 @@ class TestBatchCache:
             "final_score": 82,
             "verdict_subtext": "Reliable reporting.",
         }
+        if include_summary:
+            base["neutral_summary"] = (
+                "The article reports on a new federal housing policy.\n\n"
+                "The government cites Statistics Canada data showing an 8% rise in homelessness.\n\n"
+                "The policy aims to reduce housing costs by 15%.\n\n"
+                "No independent verification of the 15% figure is provided.\n\n"
+                "Overall, this is a government policy announcement with limited external sourcing."
+            )
+        return base
 
     def test_prime_batch_cache_stores_result(self):
         from gemini_client import prime_batch_cache, get_batch_result
@@ -109,6 +118,109 @@ class TestBatchCache:
 
         assert get_batch_result("text A", "title A", "emotional")["score"] == 90
         assert get_batch_result("text B", "title B", "emotional")["score"] == 10
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# NEUTRAL SUMMARY — generation and pass-through tests
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestNeutralSummary:
+    def setup_method(self):
+        import gemini_client
+        gemini_client._batch_cache.clear()
+
+    def _make_fake_mega_with_summary(self):
+        return {
+            "emotional": {"score": 85, "reason": "Neutral tone"},
+            "author":    {"score": 75, "reason": "Named journalist"},
+            "content":   {"score": 80, "reason": "Factual content"},
+            "mdm":       {"classification": "Valid", "reason": "Accurate"},
+            "factual":   {"core_claim": "Test claim", "score": 80, "reason": "Confirmed"},
+            "final_score": 82,
+            "verdict_subtext": "Reliable reporting.",
+            "neutral_summary": (
+                "The article reports on a government housing policy.\n\n"
+                "Evidence cited includes Statistics Canada data.\n\n"
+                "Context: homelessness has risen 8% since 2020.\n\n"
+                "The article does not include independent expert verification.\n\n"
+                "This is a straightforward policy announcement with limited external sourcing."
+            ),
+        }
+
+    def test_neutral_summary_stored_in_cache(self):
+        """neutral_summary is stored in batch cache when AI returns it."""
+        from gemini_client import prime_mega_cache, get_batch_result
+        import gemini_client, hashlib
+
+        with patch("gemini_client.call_gemini", return_value=self._make_fake_mega_with_summary()):
+            prime_mega_cache("article text", "headline", "John Doe")
+
+        cache_key = hashlib.md5(("article text"[:3000] + "headline").encode()).hexdigest()
+        cached = gemini_client._batch_cache.get(cache_key)
+        assert cached is not None
+        assert "neutral_summary" in cached
+        assert "housing policy" in cached["neutral_summary"]
+
+    def test_neutral_summary_in_scorer_result(self):
+        """scorer.run_all() passes neutral_summary through to the result dict."""
+        import scorer, gemini_client, hashlib
+
+        fake_mega = self._make_fake_mega_with_summary()
+        cache_key = hashlib.md5((FAKE_ARTICLE["text"][:3000] + FAKE_ARTICLE["title"]).encode()).hexdigest()
+        gemini_client._batch_cache[cache_key] = fake_mega
+
+        with patch("gemini_client.call_gemini", return_value=fake_mega):
+            result = scorer.run_all(FAKE_ARTICLE)
+
+        assert "neutral_summary" in result
+        assert len(result["neutral_summary"]) > 0
+
+    def test_neutral_summary_empty_when_ai_fails(self):
+        """When AI call fails, neutral_summary is empty string (not missing)."""
+        import scorer, gemini_client
+        gemini_client._batch_cache.clear()
+
+        with patch("gemini_client.call_gemini", return_value=None):
+            result = scorer.run_all(FAKE_ARTICLE)
+
+        assert "neutral_summary" in result
+        assert result["neutral_summary"] == ""
+
+    def test_neutral_summary_has_multiple_paragraphs(self):
+        """The summary contains paragraph breaks (\\n\\n separators)."""
+        from gemini_client import prime_mega_cache, get_batch_result
+        import gemini_client, hashlib
+
+        with patch("gemini_client.call_gemini", return_value=self._make_fake_mega_with_summary()):
+            prime_mega_cache("article text", "headline", "John Doe")
+
+        cache_key = hashlib.md5(("article text"[:3000] + "headline").encode()).hexdigest()
+        summary = gemini_client._batch_cache[cache_key]["neutral_summary"]
+        paragraphs = [p for p in summary.split("\n\n") if p.strip()]
+        assert len(paragraphs) >= 4
+
+    def test_neutral_summary_missing_from_ai_response_gracefully_handled(self):
+        """If AI returns valid JSON without neutral_summary, scorer still works."""
+        import scorer, gemini_client, hashlib
+
+        # Mega response without neutral_summary key
+        fake_mega_no_summary = {
+            "emotional": {"score": 85, "reason": "Neutral"},
+            "author":    {"score": 75, "reason": "Named"},
+            "content":   {"score": 80, "reason": "Factual"},
+            "mdm":       {"classification": "Valid", "reason": "Accurate"},
+            "factual":   {"core_claim": "Claim", "score": 80, "reason": "Confirmed"},
+            "final_score": 82,
+            "verdict_subtext": "Reliable.",
+        }
+        cache_key = hashlib.md5((FAKE_ARTICLE["text"][:3000] + FAKE_ARTICLE["title"]).encode()).hexdigest()
+        gemini_client._batch_cache[cache_key] = fake_mega_no_summary
+
+        with patch("gemini_client.call_gemini", return_value=fake_mega_no_summary):
+            result = scorer.run_all(FAKE_ARTICLE)
+
+        assert result["neutral_summary"] == ""
+        assert result["final_score"] > 0  # Rest of analysis still works
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -476,3 +588,205 @@ class TestFlaskRoutes:
         assert len(flask_app._analysis_history) == 3
         assert flask_app._analysis_history[0]["title"] == "Article 2"  # most recent first
         flask_app._analysis_history.clear()
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# SCORE CONSISTENCY — weighted math always wins over AI final_score
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestScoreConsistency:
+    """Verify that the final score always comes from weighted math, not AI."""
+
+    def setup_method(self):
+        import gemini_client
+        gemini_client._batch_cache.clear()
+
+    def _make_mega_with_bad_final_score(self):
+        """Simulates what Groq did: criteria average ~83 but final_score=58."""
+        return {
+            "emotional": {"score": 82, "reason": "Neutral tone"},
+            "author":    {"score": 90, "reason": "Named journalist"},
+            "content":   {"score": 72, "reason": "Factual content"},
+            "mdm":       {"classification": "Valid", "reason": "Accurate reporting"},
+            "factual":   {"core_claim": "Israel struck fuel storage in Tehran", "score": 76, "reason": "AP confirmed"},
+            "final_score": 58,  # Groq's inconsistent value — should be ignored
+            "verdict_subtext": "Reliable war reporting.",
+            "neutral_summary": "Para1.\n\nPara2.\n\nPara3.\n\nPara4.\n\nPara5.",
+        }
+
+    def test_scorer_ignores_ai_final_score(self):
+        """scorer.run_all() uses weighted math, not the AI's final_score field."""
+        import scorer, gemini_client, hashlib
+
+        fake_mega = self._make_mega_with_bad_final_score()
+        cache_key = hashlib.md5((FAKE_ARTICLE["text"][:3000] + FAKE_ARTICLE["title"]).encode()).hexdigest()
+        gemini_client._batch_cache[cache_key] = fake_mega
+
+        with patch("gemini_client.call_gemini", return_value=fake_mega):
+            result = scorer.run_all(FAKE_ARTICLE)
+
+        assert result["final_score"] != 58
+
+    def test_backboard_ignores_ai_final_score(self):
+        """backboard_client _build_final_result() uses weighted math."""
+        import gemini_client, hashlib
+        from backboard_client import BackboardOrchestrator
+
+        fake_mega = self._make_mega_with_bad_final_score()
+        cache_key = hashlib.md5((FAKE_ARTICLE["text"][:3000] + FAKE_ARTICLE["title"]).encode()).hexdigest()
+        gemini_client._batch_cache[cache_key] = fake_mega
+
+        analysis = {
+            "emotional": fake_mega["emotional"],
+            "author":    fake_mega["author"],
+            "content":   fake_mega["content"],
+            "mdm":       fake_mega["mdm"],
+            "factual":   fake_mega["factual"],
+        }
+        domain_result = {"score": 86, "reason": "High credibility domain"}
+        fact_result   = {"score": 76, "reason": "AP confirmed", "core_claim": "Israel struck Tehran"}
+        article_data  = dict(FAKE_ARTICLE, domain="theglobeandmail.com")
+
+        orch = BackboardOrchestrator.__new__(BackboardOrchestrator)
+        orch._local_result_cache = {}
+        result = orch._build_final_result(article_data, domain_result, analysis, fact_result)
+
+        assert result["final_score"] != 58
+        assert result["final_score"] > 70
+
+    def test_mdm_classification_uses_post_boost_value(self):
+        """mdm_classification in result reflects trusted-source boost, not raw AI value."""
+        import gemini_client, hashlib
+        from backboard_client import BackboardOrchestrator
+
+        fake_mega = self._make_mega_with_bad_final_score()
+        fake_mega["mdm"]["classification"] = "Misinformation"  # Groq got it wrong
+
+        cache_key = hashlib.md5((FAKE_ARTICLE["text"][:3000] + FAKE_ARTICLE["title"]).encode()).hexdigest()
+        gemini_client._batch_cache[cache_key] = fake_mega
+
+        analysis = {
+            "emotional": fake_mega["emotional"],
+            "author":    fake_mega["author"],
+            "content":   fake_mega["content"],
+            "mdm":       fake_mega["mdm"],
+            "factual":   fake_mega["factual"],
+        }
+        domain_result = {"score": 86, "reason": "High credibility"}
+        fact_result   = {"score": 76, "reason": "Confirmed", "core_claim": "Test"}
+        article_data  = dict(FAKE_ARTICLE, domain="theglobeandmail.com")
+
+        orch = BackboardOrchestrator.__new__(BackboardOrchestrator)
+        orch._local_result_cache = {}
+        result = orch._build_final_result(article_data, domain_result, analysis, fact_result)
+
+        # Trusted-source boost should override Misinformation → Valid
+        assert result["mdm_classification"] == "Valid"
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# INTEGRATION TESTS — live Groq API (skipped if no key)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+import pytest
+
+@pytest.mark.integration
+class TestGroqIntegration:
+    """
+    Live integration tests against the Groq API.
+    Run with: python -m pytest tests/ -m integration -v
+    Skipped automatically if GROQ_API_KEY is not set.
+    """
+
+    @pytest.fixture(autouse=True)
+    def require_groq(self):
+        import os
+        from dotenv import load_dotenv
+        load_dotenv()
+        if not os.getenv("GROQ_API_KEY"):
+            pytest.skip("GROQ_API_KEY not set")
+
+    def setup_method(self):
+        import gemini_client
+        gemini_client._batch_cache.clear()
+        self._orig_clients = gemini_client._clients[:]
+        gemini_client._clients = []  # Force Groq path
+
+    def teardown_method(self):
+        import gemini_client
+        gemini_client._clients = self._orig_clients
+
+    def test_groq_returns_valid_json(self):
+        """Groq responds to a simple JSON prompt."""
+        import gemini_client
+        result = gemini_client.call_gemini(
+            'Return JSON with key "ok" set to true: {"ok": true}'
+        )
+        assert result is not None
+        assert result.get("ok") is True
+
+    def test_groq_mega_cache_primes_successfully(self):
+        """prime_mega_cache() populates all required keys via Groq."""
+        from gemini_client import prime_mega_cache, get_batch_result
+        success = prime_mega_cache(FAKE_ARTICLE["text"], FAKE_ARTICLE["title"], "Jane Doe")
+        assert success is True
+        assert get_batch_result(FAKE_ARTICLE["text"], FAKE_ARTICLE["title"], "emotional") is not None
+        assert get_batch_result(FAKE_ARTICLE["text"], FAKE_ARTICLE["title"], "factual") is not None
+
+    def test_groq_neutral_summary_generated(self):
+        """Groq generates a neutral_summary with multiple paragraphs."""
+        import gemini_client, hashlib
+        from gemini_client import prime_mega_cache
+
+        prime_mega_cache(FAKE_ARTICLE["text"], FAKE_ARTICLE["title"], "Jane Doe")
+        key = hashlib.md5((FAKE_ARTICLE["text"][:3000] + FAKE_ARTICLE["title"]).encode()).hexdigest()
+        root = gemini_client._batch_cache.get(key)
+
+        assert root is not None
+        summary = root.get("neutral_summary", "")
+        assert len(summary) > 100
+        paragraphs = [p for p in summary.split("\n\n") if p.strip()]
+        assert len(paragraphs) >= 3
+
+    def test_groq_mdm_valid_for_credible_source(self):
+        """Groq classifies a clear government article as Valid or Unsustainable."""
+        import gemini_client, hashlib
+        from gemini_client import prime_mega_cache
+
+        gov_article = dict(
+            FAKE_ARTICLE,
+            title="Statistics Canada releases 2024 population census data",
+            text=(
+                "Statistics Canada today published the 2024 national census results. "
+                "Canada's population grew to 42.1 million, up 5.4% since 2021. "
+                "The census was conducted online and by mail between May and August 2024. "
+                "Chief Statistician Anil Arora said response rates were the highest in two decades."
+            ),
+        )
+        prime_mega_cache(gov_article["text"], gov_article["title"], "Stats Canada")
+        key = hashlib.md5((gov_article["text"][:3000] + gov_article["title"]).encode()).hexdigest()
+        root = gemini_client._batch_cache.get(key)
+        assert root.get("mdm", {}).get("classification") in ("Valid", "Unsustainable")
+
+    def test_groq_emotional_high_for_neutral_article(self):
+        """Neutral government-style article scores 60+ on emotional."""
+        import gemini_client, hashlib
+        from gemini_client import prime_mega_cache
+
+        prime_mega_cache(FAKE_ARTICLE["text"], FAKE_ARTICLE["title"], "Jane Doe")
+        key = hashlib.md5((FAKE_ARTICLE["text"][:3000] + FAKE_ARTICLE["title"]).encode()).hexdigest()
+        root = gemini_client._batch_cache.get(key)
+        assert root.get("emotional", {}).get("score", 0) >= 60
+
+    def test_groq_emotional_low_for_clickbait(self):
+        """Clickbait article scores below 60 on emotional."""
+        import gemini_client, hashlib
+        from gemini_client import prime_mega_cache
+
+        prime_mega_cache(
+            FAKE_CLICKBAIT_ARTICLE["text"],
+            FAKE_CLICKBAIT_ARTICLE["title"], ""
+        )
+        key = hashlib.md5((FAKE_CLICKBAIT_ARTICLE["text"][:3000] + FAKE_CLICKBAIT_ARTICLE["title"]).encode()).hexdigest()
+        root = gemini_client._batch_cache.get(key)
+        assert root.get("emotional", {}).get("score", 100) < 60
