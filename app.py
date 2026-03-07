@@ -37,7 +37,7 @@ ROUTES IN THIS APP:
 
 import os
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from collections import deque
 
 # Flask is the web framework — it's what makes Python serve web pages
@@ -156,7 +156,7 @@ def analyze():
 
         # Save to history for the /history endpoint
         _analysis_history.appendleft({
-            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "url": user_input if mode == "url" else "",
             "title": article_data.get("title", "Pasted text"),
             "verdict": result.get("verdict", ""),
