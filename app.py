@@ -37,6 +37,8 @@ ROUTES IN THIS APP:
 
 import os
 import json
+from datetime import datetime
+from collections import deque
 
 # Flask is the web framework — it's what makes Python serve web pages
 # - Flask: the main class that creates the web server
@@ -58,11 +60,17 @@ from dotenv import load_dotenv
 # Our own files (these are the ones WE wrote):
 import scraper   # scraper.py — extracts text from article URLs
 import scorer    # scorer.py — runs all 6 criteria and calculates final score
+from backboard_client import orchestrator  # Backboard multi-agent orchestrator
 
 # Load API keys from .env file
 load_dotenv()
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY")
+
+# ── In-memory analysis history (last 20 analyses) ────────────────────────────
+# In production this would use Backboard's persistent semantic memory.
+# For the demo, this survives the session and showcases the caching concept.
+_analysis_history: deque = deque(maxlen=20)
 
 # ── Create the Flask app ─────────────────────────────────────────────────────
 # Flask(__name__) creates a new web server
@@ -133,15 +141,29 @@ def analyze():
                          "Try pasting the article text instead."
             }), 422  # 422 = "I understood your request but can't process it"
 
-        # ── Step 2: Run all 6 criteria and compute the score ─────────────
-        # scorer.run_all() is where the magic happens — it runs all 6
-        # criterion modules IN PARALLEL (at the same time) for speed
-        result = scorer.run_all(article_data)
+        # ── Step 2: Run analysis via Backboard agents (or fallback) ──────
+        # Try Backboard multi-agent orchestration first (semantic memory,
+        # RAG, cross-session caching). Falls back to direct scorer if
+        # Backboard is not configured or unavailable.
+        result = orchestrator.run(article_data)
+        if result is None:
+            result = scorer.run_all(article_data)
 
         # Add some extra info for the frontend to display
         result["input_url"] = user_input if mode == "url" else ""
         result["article_title"] = article_data.get("title", "")
         result["scrape_error"] = article_data.get("error")
+
+        # Save to history for the /history endpoint
+        _analysis_history.appendleft({
+            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "url": user_input if mode == "url" else "",
+            "title": article_data.get("title", "Pasted text"),
+            "verdict": result.get("verdict", ""),
+            "verdict_class": result.get("verdict_class", "v-uncertain"),
+            "final_score": result.get("final_score", 0),
+            "mdm_classification": result.get("mdm_classification", ""),
+        })
 
         # Send the result back to the browser as JSON
         # 200 = "OK, everything worked"
@@ -219,6 +241,101 @@ def speak():
     except Exception as e:
         print(f"[ERROR] /speak: {e}")
         return jsonify({"error": f"Text-to-speech failed: {str(e)}"}), 500
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# ROUTE 4: Analysis history
+# ══════════════════════════════════════════════════════════════════════════════
+@app.route("/history", methods=["GET"])
+def history():
+    """
+    Returns the last 20 analyses from the in-memory history store.
+    In production this would query Backboard's semantic memory for
+    persistent cross-session results.
+    """
+    return jsonify(list(_analysis_history)), 200
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# ROUTE 5: Conversational explain (for follow-up voice questions)
+# ══════════════════════════════════════════════════════════════════════════════
+@app.route("/explain", methods=["POST"])
+def explain():
+    """
+    Generates a focused spoken explanation answering a follow-up question
+    about the analysis, then converts it to ElevenLabs audio.
+
+    question_type options:
+      "why_flagged"   — explains the worst-scoring criterion in detail
+      "what_check"    — gives specific verification recommendations
+      "compare"       — how this outlet has performed historically
+    """
+    if not ELEVENLABS_API_KEY:
+        return jsonify({"error": "ElevenLabs API key not configured"}), 503
+
+    try:
+        data = request.get_json()
+        question_type = data.get("question_type", "why_flagged")
+        verdict_data = data.get("verdict_data", {})
+
+        criteria = verdict_data.get("criteria", [])
+        verdict = verdict_data.get("verdict", "Uncertain")
+        final_score = verdict_data.get("final_score", 50)
+        mdm = verdict_data.get("mdm_classification", "Unsustainable")
+
+        # Find weakest and strongest criteria
+        weakest = min(criteria, key=lambda c: c["score"]) if criteria else None
+        strongest = max(criteria, key=lambda c: c["score"]) if criteria else None
+
+        if question_type == "why_flagged":
+            if weakest:
+                speech_text = (
+                    f"The biggest concern is {weakest['label']}, which scored "
+                    f"{weakest['score']} out of 100. {weakest['reason']} "
+                    f"This is weighted at {weakest['weight']} of the total score, "
+                    f"making it a significant factor in the overall {verdict} rating."
+                )
+            else:
+                speech_text = f"This content scored {final_score} out of 100. No specific criterion data is available."
+
+        elif question_type == "what_check":
+            checks = []
+            for c in sorted(criteria, key=lambda x: x["score"])[:3]:
+                checks.append(f"For {c['label']}: {c['reason']}")
+            speech_text = (
+                "Here are the top things to verify before sharing this content. "
+                + " ".join(checks) + " "
+                "Always cross-reference with CBC, Globe and Mail, or official government sources."
+            )
+
+        elif question_type == "compare":
+            if strongest:
+                speech_text = (
+                    f"The strongest signal for this content is {strongest['label']}, "
+                    f"scoring {strongest['score']} out of 100. {strongest['reason']} "
+                    f"Overall, this content is classified as {mdm} under the "
+                    f"Canadian Centre for Cyber Security framework."
+                )
+            else:
+                speech_text = f"This content is classified as {mdm} with a score of {final_score} out of 100."
+        else:
+            speech_text = f"This content scored {final_score} out of 100 and is rated {verdict}."
+
+        from elevenlabs import ElevenLabs
+        client = ElevenLabs(api_key=ELEVENLABS_API_KEY)
+        audio_generator = client.text_to_speech.convert(
+            voice_id="JBFqnCBsd6RMkjVDRZzb",
+            text=speech_text,
+            model_id="eleven_multilingual_v2",
+            output_format="mp3_44100_128",
+        )
+        audio_bytes = b"".join(audio_generator)
+        return Response(audio_bytes, mimetype="audio/mpeg",
+                        headers={"Content-Disposition": "inline; filename=explain.mp3"})
+
+    except Exception as e:
+        print(f"[ERROR] /explain: {e}")
+        return jsonify({"error": f"Explain failed: {str(e)}"}), 500
 
 
 # ══════════════════════════════════════════════════════════════════════════════
