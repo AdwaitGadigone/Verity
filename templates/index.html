@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Verity &mdash; Canadian Misinformation Detector</title>
+    <meta name="description"
+        content="Verity scores articles across 6 criteria from Canada's official cybersecurity guidelines." />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
+        rel="stylesheet" />
+    <link rel="stylesheet" href="/static/style.css" />
+</head>
+
+<body>
+
+    <!-- ═══════════════════════════════════════════════════════
+       SITE HEADER — solid green, gold bottom line
+       Clicking "Verity" resets to input screen via resetToInput()
+  ═══════════════════════════════════════════════════════════ -->
+    <header class="site-header">
+        <div class="header-inner">
+
+            <div class="logo" onclick="resetToInput()" role="button" tabindex="0" title="Return to home"
+                aria-label="Verity home">
+                <span class="logo-icon">&#9878;</span>
+                <!-- "Verity" — the dot on the i uses our ONE gold colour -->
+                <span class="logo-text">Verity</span>
+            </div>
+
+            <div class="header-divider"></div>
+            <span class="header-tag">Canada's Misinformation Detector</span>
+
+            <div class="header-right">
+                <span class="header-badge">ITSAP.00.300</span>
+            </div>
+
+        </div>
+    </header>
+
+    <main>
+
+        <!-- ═══════════════════════════════════════════════════
+         INPUT SECTION
+    ═══════════════════════════════════════════════════════ -->
+        <section id="input-section" class="input-section">
+
+            <!-- Hero — solid green, enough bottom padding -->
+            <div class="hero-section">
+                <div class="container">
+                    <div class="hero-eyebrow">&#11088; AI-Powered Fact Check</div>
+                    <!-- "news" is plain white (no gold highlighting) -->
+                    <h1>Is this news trustworthy?</h1>
+                    <p class="hero-subtitle">
+                        Paste a URL or article text. Verity scores it across
+                        6 criteria from Canada's official cybersecurity guidelines
+                        and tells you exactly why.
+                    </p>
+                </div>
+            </div>
+
+            <!-- Input card — floats over the hero -->
+            <div class="container">
+                <div class="input-card">
+
+                    <!-- URL / Text tabs -->
+                    <div class="tab-bar" role="tablist">
+                        <button id="tab-url" class="tab active" role="tab" aria-selected="true"
+                            onclick="switchTab('url')">
+                            &#128279;&nbsp; Paste URL
+                        </button>
+                        <button id="tab-text" class="tab" role="tab" aria-selected="false" onclick="switchTab('text')">
+                            &#128196;&nbsp; Paste Text
+                        </button>
+                    </div>
+
+                    <div id="input-url-wrapper" class="input-wrapper">
+                        <input id="url-input" type="url" class="main-input" placeholder="https://example.com/article..."
+                            aria-label="Article URL" />
+                    </div>
+
+                    <div id="input-text-wrapper" class="input-wrapper" style="display:none">
+                        <textarea id="text-input" class="main-input text-area" rows="8"
+                            placeholder="Paste the full article text here..." aria-label="Article text"></textarea>
+                    </div>
+
+                    <button id="analyze-btn" class="analyze-btn" onclick="runAnalysis()">
+                        Analyze Content
+                    </button>
+
+                    <p class="powered-by">
+                        Powered by
+                        <a href="https://www.cyber.gc.ca/en/guidance/how-identify-misinformation-disinformation-and-malinformation-itsap00300"
+                            target="_blank" rel="noopener">
+                            Canadian Centre for Cyber Security (ITSAP.00.300)
+                        </a>
+                    </p>
+
+                    <div class="trust-badges">
+                        <div class="trust-badge">
+                            <span class="trust-badge-icon">&#10003;</span> 6-Criteria Analysis
+                        </div>
+                        <div class="trust-badge">
+                            <span class="trust-badge-icon">&#10003;</span> Powered by Gemini AI
+                        </div>
+                        <div class="trust-badge">
+                            <span class="trust-badge-icon">&#10003;</span> Govt. Standards
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+        </section>
+
+        <!-- ═══════════════════════════════════════════════════
+         LOADING SECTION
+    ═══════════════════════════════════════════════════════ -->
+        <section id="loading-section" class="loading-section" style="display:none" aria-live="polite">
+            <div class="container">
+                <div class="loader-ring"></div>
+                <h2 class="loading-title">Analyzing&hellip;</h2>
+                <p class="loading-subtitle">Running 6 independent checks + AI scoring</p>
+                <ul id="loading-checklist" class="loading-checklist">
+                    <li id="lc-domain" class="lc-item">&#128193; Checking domain &amp; publisher credibility</li>
+                    <li id="lc-emotional" class="lc-item">&#128172; Analyzing emotional language &amp; clickbait</li>
+                    <li id="lc-factual" class="lc-item">&#128269; Verifying facts with Gemini AI</li>
+                    <li id="lc-author" class="lc-item">&#9997; Checking author &amp; source transparency</li>
+                    <li id="lc-content" class="lc-item">&#128196; Assessing content integrity</li>
+                    <li id="lc-mdm" class="lc-item">&#127464;&#127462; Classifying under MDM framework</li>
+                </ul>
+            </div>
+        </section>
+
+        <!-- ═══════════════════════════════════════════════════
+         RESULTS SECTION
+         IMPORTANT: all id="" values here must match exactly
+         what renderResults() in script.js looks for.
+    ═══════════════════════════════════════════════════════ -->
+        <section id="results-section" class="results-section" style="display:none">
+            <div class="container">
+
+                <!-- Article title (rendered by JS) -->
+                <p id="result-article-title" class="article-title-display" style="display:none"></p>
+
+                <!-- Verdict banner -->
+                <div id="verdict-banner" class="verdict-banner v-uncertain">
+                    <div class="verdict-eyebrow">Credibility Assessment</div>
+                    <div class="verdict-title" id="result-verdict-title"></div>
+                    <div class="verdict-score-row">
+                        <span class="score-big" id="result-score"></span>
+                        <span class="score-label">/ 100</span>
+                    </div>
+                    <div id="result-mdm-badge" class="mdm-badge"></div>
+                    <p id="result-verdict-subtext" class="verdict-subtext"></p>
+                </div>
+
+                <!-- Core claim (hidden if not present) -->
+                <div id="core-claim-section" class="core-claim-section" style="display:none">
+                    <p class="core-claim-label">&#128270; Primary claim identified</p>
+                    <p id="core-claim-text" class="core-claim-text"></p>
+                </div>
+
+                <!-- Full criteria breakdown -->
+                <div class="report-card">
+                    <div class="report-card-header">
+                        <span class="report-card-title">Full Breakdown</span>
+                        <span class="report-card-subtitle">6 criteria &bull; ITSAP.00.300</span>
+                    </div>
+                    <div id="criteria-list" class="criteria-list"></div>
+                </div>
+
+                <!-- Voice buttons -->
+                <div class="voice-section">
+                    <div class="voice-buttons">
+                        <button id="speak-btn" class="speak-btn" onclick="readVerdictAloud()">
+                            &#128264; Read Verdict Aloud
+                        </button>
+                        <button id="stop-btn" class="stop-btn" onclick="stopAudio()">
+                            &#9632; Stop
+                        </button>
+                    </div>
+                    <p class="voice-hint">Powered by ElevenLabs AI Voice</p>
+                </div>
+
+                <button class="reset-btn" onclick="resetToInput()">
+                    &#8592; Analyze Another Article
+                </button>
+
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Footer — team names included -->
+    <footer class="site-footer">
+        <p>
+            Criteria based on
+            <a href="https://www.cyber.gc.ca/en/guidance/how-identify-misinformation-disinformation-and-malinformation-itsap00300"
+                target="_blank" rel="noopener">Canadian Centre for Cyber Security ITSAP.00.300</a>
+            &mdash; Always verify with multiple sources.
+        </p>
+        <p>Built at Hack Canada 2026 &middot; Powered by Google Gemini &amp; ElevenLabs</p>
+        <p class="footer-team">by Adwait Gadigone, Hasan Naqvi, Haroldina Koolaid</p>
+    </footer>
+
+    <script src="/static/script.js"></script>
+</body>
+
+</html>
