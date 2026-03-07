@@ -70,10 +70,34 @@ function switchTab(mode) {
 // SECTION VISIBILITY
 // ══════════════════════════════════════════════════════════════════
 function showSection(id) {
-  ["input-section", "loading-section", "results-section"].forEach(s => {
+  ["landing-section", "input-section", "loading-section", "results-section"].forEach(s => {
     const section = el(s);
     if (section) section.style.display = (s === id) ? "block" : "none";
   });
+}
+
+// Show the analyzer tool (from landing page CTA or header button)
+function showAnalyzer() {
+  showSection("input-section");
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+// Go back to the landing page (logo click)
+function goToLanding() {
+  if (currentAudio) { currentAudio.pause(); currentAudio = null; }
+  if (summaryAudio) { summaryAudio.pause(); summaryAudio = null; }
+  lastResult = null;
+  isPlayingExplain = false;
+  showSection("landing-section");
+  window.scrollTo({ top: 0, behavior: "smooth" });
+  // Trigger demo bar animations again
+  setTimeout(() => {
+    document.querySelectorAll(".lp-demo-fill").forEach(bar => {
+      bar.style.animation = "none";
+      bar.offsetHeight; // reflow
+      bar.style.animation = "";
+    });
+  }, 100);
 }
 
 
@@ -561,6 +585,9 @@ document.addEventListener("DOMContentLoaded", () => {
     if (e.key === "Enter") runAnalysis();
   });
 
-  // Load history on page load
+  // Show landing page on initial load
+  showSection("landing-section");
+
+  // Load history (rendered when analyzer is shown)
   loadHistory();
 });
