@@ -102,7 +102,8 @@ Return ONLY this JSON structure (no markdown, no extra text):
     "reason": "<2 sentences on whether the core claim is accurate per reputable Canadian sources>"
   }},
   "final_score": <0-100 overall credibility>,
-  "verdict_subtext": "<one sentence stating the content type and overall credibility assessment>"
+  "verdict_subtext": "<one sentence stating the content type and overall credibility assessment>",
+  "neutral_summary": "<4-5 paragraphs in plain, objective language with zero emotional framing. Paragraph 1: what the article claims. Paragraph 2: evidence cited (sources, data, quotes used). Paragraph 3: broader context and background. Paragraph 4: what the article omits, disputes, or leaves unverified. Paragraph 5: one-sentence plain-English takeaway. Separate paragraphs with \\n\\n. Do NOT use loaded words or the article's own emotional framing.>"
 }}"""
 
     result = call_gemini(prompt)
@@ -208,7 +209,7 @@ def call_gemini(prompt: str, model: str = "gemini-2.0-flash") -> dict | None:
                 config=genai_types.GenerateContentConfig(
                     response_mime_type="application/json",
                     temperature=0.1,
-                    max_output_tokens=1024,
+                    max_output_tokens=2048,
                 ),
             )
             return json.loads(response.text)

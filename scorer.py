@@ -217,9 +217,11 @@ def run_all(article_data: dict) -> dict:
     if mega and "final_score" in mega:
         final_score = int(mega["final_score"])
         verdict_subtext_base = mega.get("verdict_subtext")
+        neutral_summary = mega.get("neutral_summary", "")
     else:
         final_score = fallback_score
         verdict_subtext_base = None
+        neutral_summary = ""
 
     # Determine the verdict (5-tier system) based on final_score
     if final_score >= 90:
@@ -300,5 +302,6 @@ def run_all(article_data: dict) -> dict:
         "verdict_class":     verdict_class,
         "mdm_classification": mdm_classification,
         "core_claim":        core_claim,
+        "neutral_summary":   neutral_summary,
         "criteria":          criteria_display,
     }

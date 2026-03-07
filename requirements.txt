@@ -1,9 +1,11 @@
 flask
-google-generativeai
+flask-cors
+google-genai
+openai
 python-whois
 newspaper4k
 beautifulsoup4
 requests
 python-dotenv
 elevenlabs
-flask-cors
+backboard-sdk==1.5.3
