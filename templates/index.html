@@ -182,7 +182,11 @@
                     <div class="neutral-summary-header">
                         <span class="neutral-summary-icon">&#128220;</span>
                         <span class="neutral-summary-title">Neutral Summary</span>
-                        <button class="neutral-summary-toggle" onclick="toggleSummary()" id="summary-toggle-btn">Hide</button>
+                        <div class="neutral-summary-controls">
+                            <button class="summary-speak-btn" id="summary-speak-btn" onclick="readSummaryAloud()">&#128264; Read</button>
+                            <button class="summary-stop-btn" id="summary-stop-btn" onclick="stopSummaryAudio()" style="display:none">&#9632; Stop</button>
+                            <button class="neutral-summary-toggle" onclick="toggleSummary()" id="summary-toggle-btn">Hide</button>
+                        </div>
                     </div>
                     <div id="neutral-summary-body" class="neutral-summary-body"></div>
                 </div>
