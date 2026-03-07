@@ -214,12 +214,12 @@ def run_all(article_data: dict) -> dict:
         cache_key = hashlib.md5((article_text[:3000] + title).encode()).hexdigest()
         mega = gemini_client._batch_cache.get(cache_key)
 
-    if mega and "final_score" in mega:
-        final_score = int(mega["final_score"])
-        verdict_subtext_base = mega.get("verdict_subtext")
-    else:
-        final_score = fallback_score
-        verdict_subtext_base = None
+    # Always use weighted math for final_score — AI-generated final_score
+    # is often inconsistent with its own criteria scores (e.g. rates a
+    # criterion 86/100 but gives overall 58). Trust the math, not the AI.
+    final_score = fallback_score
+    verdict_subtext_base = mega.get("verdict_subtext") if mega else None
+    neutral_summary = mega.get("neutral_summary", "") if mega else ""
 
     # Determine the verdict (5-tier system) based on final_score
     if final_score >= 90:
@@ -300,5 +300,6 @@ def run_all(article_data: dict) -> dict:
         "verdict_class":     verdict_class,
         "mdm_classification": mdm_classification,
         "core_claim":        core_claim,
+        "neutral_summary":   neutral_summary,
         "criteria":          criteria_display,
     }

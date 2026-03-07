@@ -156,6 +156,11 @@
                 <!-- Article title (rendered by JS) -->
                 <p id="result-article-title" class="article-title-display" style="display:none"></p>
 
+                <!-- Cache badge (shown when result is from memory) -->
+                <div id="cache-badge" class="cache-badge" style="display:none">
+                    &#9889; From Memory &mdash; instant result
+                </div>
+
                 <!-- Verdict banner -->
                 <div id="verdict-banner" class="verdict-banner v-uncertain">
                     <div class="verdict-eyebrow">Credibility Assessment</div>
@@ -172,6 +177,16 @@
                 <div id="core-claim-section" class="core-claim-section" style="display:none">
                     <p class="core-claim-label">&#128270; Primary claim identified</p>
                     <p id="core-claim-text" class="core-claim-text"></p>
+                </div>
+
+                <!-- Neutral summary (hidden if not present) -->
+                <div id="neutral-summary-section" class="neutral-summary-section" style="display:none">
+                    <div class="neutral-summary-header">
+                        <span class="neutral-summary-icon">&#128220;</span>
+                        <span class="neutral-summary-title">Neutral Summary</span>
+                        <button class="neutral-summary-toggle" onclick="toggleSummary()" id="summary-toggle-btn">Hide</button>
+                    </div>
+                    <div id="neutral-summary-body" class="neutral-summary-body"></div>
                 </div>
 
                 <!-- Full criteria breakdown -->

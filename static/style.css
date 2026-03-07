@@ -618,6 +618,82 @@ a:hover {
   font-style: italic;
 }
 
+/* ── CACHE BADGE ────────────────────────────────── */
+.cache-badge {
+  display: inline-block;
+  background: var(--green);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  padding: 6px 14px;
+  border-radius: 20px;
+  margin-bottom: 12px;
+  box-shadow: 0 2px 8px rgba(0,128,0,0.18);
+}
+
+/* ── NEUTRAL SUMMARY ─────────────────────────────── */
+.neutral-summary-section {
+  background: var(--bg-white);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  margin-bottom: 18px;
+  box-shadow: var(--shadow-sm);
+}
+
+.neutral-summary-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-light);
+}
+
+.neutral-summary-icon {
+  font-size: 16px;
+}
+
+.neutral-summary-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-heading);
+  flex: 1;
+}
+
+.neutral-summary-toggle {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--green);
+  background: none;
+  border: 1.5px solid var(--green);
+  border-radius: 12px;
+  padding: 3px 12px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.neutral-summary-toggle:hover {
+  background: var(--green);
+  color: #fff;
+}
+
+.neutral-summary-body {
+  padding: 16px 20px;
+}
+
+.neutral-summary-body p {
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--text-body);
+  margin: 0 0 12px 0;
+}
+
+.neutral-summary-body p:last-child {
+  margin-bottom: 0;
+}
+
 /* ── CORE CLAIM ─────────────────────────────────── */
 .core-claim-section {
   background: var(--blue-light);
