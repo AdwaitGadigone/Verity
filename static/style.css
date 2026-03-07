@@ -146,6 +146,12 @@ a:hover {
   letter-spacing: -0.5px;
 }
 
+.logo-img {
+  height: 38px; /* Increased height to make logo more prominent */
+  width: auto;
+  object-fit: contain;
+}
+
 /* Gold dot as accent on the "y" — subtle brand touch */
 .logo-accent {
   color: var(--gold);
@@ -158,8 +164,10 @@ a:hover {
 }
 
 .header-tag {
-  font-size: 13px;
-  color: rgba(255, 255, 255, 0.75);
+  font-size: 20px;
+  font-weight: 800;
+  color: #ffffff;
+  letter-spacing: -0.5px;
 }
 
 .header-right {
