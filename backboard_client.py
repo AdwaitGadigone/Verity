@@ -333,24 +333,25 @@ class BackboardOrchestrator:
             print(f"[Backboard] Memory store failed (non-critical): {e}")
 
     async def _run_analysis_agent(self, article_data: dict) -> dict:
-        """Analysis Agent: criteria 2, 4, 5, 6 in one Backboard call with RAG."""
+        """Analysis Agent: ALL criteria (2-6) + final score in one Backboard call with RAG."""
         text = article_data.get("text", "")
         title = article_data.get("title", "")
         authors = article_data.get("authors", [])
         author_name = authors[0] if authors else "Unknown"
 
         prompt = (
-            f"Analyze this Canadian news article for 4 criteria. "
-            f"Use your MBFC and ITSAP.00.300 documents to inform your assessment.\n\n"
+            f"Analyze this Canadian news article for ALL criteria using ITSAP.00.300 and your MBFC documents.\n\n"
             f"Author: {author_name}\n"
             f"Headline: {title}\n"
             f"Article (first 2500 chars): {text[:2500]}\n\n"
             "Return ONLY valid JSON:\n"
-            '{"emotional": {"score": <0-100>, "reason": "<2-3 sentences>"},'
-            ' "author": {"score": <0-100>, "reason": "<2-3 sentences>"},'
-            ' "content": {"score": <0-100>, "reason": "<2-3 sentences>"},'
-            ' "mdm": {"classification": "<Valid|Misinformation|Malinformation|Disinformation|Unsustainable>",'
-            ' "reason": "<2-3 sentences>"}}'
+            '{"emotional": {"score": <0-100>, "reason": "<2 sentences>"},'
+            ' "author": {"score": <0-100>, "reason": "<2 sentences>"},'
+            ' "content": {"score": <0-100>, "reason": "<2 sentences>"},'
+            ' "mdm": {"classification": "<Valid|Misinformation|Malinformation|Disinformation|Unsustainable>", "reason": "<2 sentences>"},'
+            ' "factual": {"core_claim": "<main factual claim>", "score": <0-100>, "reason": "<2 sentences on accuracy>"},'
+            ' "final_score": <0-100>,'
+            ' "verdict_subtext": "<one sentence overall assessment>"}'
         )
 
         try:
@@ -377,80 +378,28 @@ class BackboardOrchestrator:
             }
 
     async def _run_fact_agent(self, article_data: dict) -> dict:
-        """Fact Agent: sequential 3-step claim extraction → verification → extraordinary test."""
+        """Fact Agent: reads factual result from the mega cache (already computed by analysis agent)."""
         text = article_data.get("text", "")
         title = article_data.get("title", "")
         publish_date = article_data.get("publish_date", "")
 
-        try:
-            thread = await self._client.create_thread(self._fact_id)
-
-            # Step 1: Extract claim
-            r1 = await self._client.add_message(
-                thread_id=thread.thread_id,
-                content=(
-                    f"Extract the single most important factual claim from this article.\n"
-                    f"Headline: {title}\nText: {text[:1500]}\n"
-                    'Return ONLY JSON: {"claim": "<one clear sentence>"}'
-                ),
-                llm_provider="google",
-                model_name="gemini-2.0-flash",
-                stream=False,
-            )
-            claim_data = json.loads(r1.content)
-            claim = claim_data.get("claim", "")
-
-            # Step 2: Verify claim (same thread — agent remembers the claim)
-            r2 = await self._client.add_message(
-                thread_id=thread.thread_id,
-                content=(
-                    f"Now cross-check this claim against reputable Canadian sources "
-                    f"(CBC, Globe and Mail, Reuters, AP): \"{claim}\"\n"
-                    "Rate accuracy 0-100 and explain.\n"
-                    'Return ONLY JSON: {"score": <0-100>, "reason": "<2-3 sentences>"}'
-                ),
-                llm_provider="google",
-                model_name="gemini-2.0-flash",
-                stream=False,
-            )
-            verify_data = json.loads(r2.content)
-            verify_score = max(0, min(100, int(verify_data.get("score", 50))))
-            verify_reason = verify_data.get("reason", "")
-
-            # Step 3: Extraordinary claim test (same thread)
-            r3 = await self._client.add_message(
-                thread_id=thread.thread_id,
-                content=(
-                    "Is the claim extraordinary (dramatic, contradicts common knowledge)? "
-                    "Does the article provide proportionate evidence?\n"
-                    'Return ONLY JSON: {"is_extraordinary": <bool>, "has_evidence": <bool>, '
-                    '"score": <0-100>, "reason": "<2-3 sentences>"}'
-                ),
-                llm_provider="google",
-                model_name="gemini-2.0-flash",
-                stream=False,
-            )
-            extra_data = json.loads(r3.content)
-            extra_score = max(0, min(100, int(extra_data.get("score", 60))))
-
-            # Date check (rule-based, no Backboard needed)
+        # The analysis agent's mega prompt already includes factual analysis.
+        # Read from the cache instead of making additional calls.
+        from gemini_client import get_batch_result
+        cached = get_batch_result(text, title, "factual")
+        if cached and "score" in cached:
             from analyzers.criterion3_factual import _check_date_recency
             date_score, date_reason = _check_date_recency(str(publish_date) if publish_date else "")
+            verify_score = max(0, min(100, int(cached["score"])))
+            final_score = int(round(verify_score * 0.70 + date_score * 0.30))
+            reason = cached.get("reason", "")
+            if date_score < 30:
+                reason = f"{date_reason}. {reason}"
+            return {"score": final_score, "reason": reason, "core_claim": cached.get("core_claim", "")}
 
-            final_score = int(round(
-                verify_score * 0.55 + date_score * 0.20 + extra_score * 0.25
-            ))
-
-            reason = verify_reason if verify_score < 35 else (
-                extra_data.get("reason", verify_reason) if extra_score < 20 else verify_reason
-            )
-
-            return {"score": final_score, "reason": reason, "core_claim": claim}
-
-        except Exception as e:
-            print(f"[Backboard] Fact agent failed: {e}. Using direct criterion3.")
-            from analyzers import criterion3_factual
-            return criterion3_factual.analyze(article_data)
+        # Fallback if cache missed
+        from analyzers import criterion3_factual
+        return criterion3_factual.analyze(article_data)
 
     async def _run_judge_agent(self, article_data: dict, domain: dict,
                                 analysis: dict, fact: dict) -> dict | None:

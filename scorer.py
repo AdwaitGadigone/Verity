@@ -165,12 +165,12 @@ def run_all(article_data: dict) -> dict:
     authors = article_data.get("authors", [])
     author_name = authors[0] if authors else ""
 
-    # ── Batch Gemini call for criteria 2, 4, 5, 6 ────────────────────────────
-    # Instead of 4 separate Gemini API calls (one per criterion), we make ONE
-    # combined call here and cache the result. Each criterion module reads from
-    # the cache via get_batch_result() instead of calling Gemini itself.
-    from gemini_client import prime_batch_cache
-    prime_batch_cache(article_text, title, author_name)
+    # ── Single mega Gemini call — covers ALL criteria + final score ───────────
+    # One call replaces what was previously 5 separate Gemini calls:
+    #   criteria 2, 4, 5, 6 AI parts + criterion 3 fact-check + final score.
+    # Each criterion reads its result from the cache via get_batch_result().
+    from gemini_client import prime_mega_cache
+    prime_mega_cache(article_text, title, author_name)
 
     # Define all 6 tasks
     tasks = [
@@ -204,15 +204,19 @@ def run_all(article_data: dict) -> dict:
     )
     fallback_score = int(round(fallback_score))
 
-    # Ask Gemini to act as the final judge
-    from gemini_client import gemini_final_score
-    article_text = article_data.get("text", "")
-    
-    gemini_judgment = gemini_final_score(results, domain, article_text)
-    
-    if gemini_judgment and "final_score" in gemini_judgment:
-        final_score = int(gemini_judgment["final_score"])
-        verdict_subtext_base = gemini_judgment.get("verdict_subtext", "")
+    # Read final score from the mega cache (already computed in the single call above).
+    # Falls back to the weighted math if the mega call failed.
+    from gemini_client import get_batch_result
+    mega = get_batch_result(article_text, title, "_self")  # "_self" returns root dict
+    if mega is None:
+        # get_batch_result doesn't support root access — fetch from cache directly
+        import gemini_client, hashlib
+        cache_key = hashlib.md5((article_text[:3000] + title).encode()).hexdigest()
+        mega = gemini_client._batch_cache.get(cache_key)
+
+    if mega and "final_score" in mega:
+        final_score = int(mega["final_score"])
+        verdict_subtext_base = mega.get("verdict_subtext")
     else:
         final_score = fallback_score
         verdict_subtext_base = None
