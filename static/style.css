@@ -948,6 +948,135 @@ a:hover {
   text-align: center;
 }
 
+/* ── Follow-up Voice Buttons ────────────────────── */
+.followup-buttons {
+  margin-top: 10px;
+  text-align: center;
+}
+
+.followup-label {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-bottom: 8px;
+}
+
+.followup-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.followup-btn {
+  padding: 8px 14px;
+  background: var(--green-light);
+  border: 1.5px solid var(--green-border);
+  border-radius: var(--radius);
+  color: var(--green-dark);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition);
+}
+
+.followup-btn:hover:not(:disabled) {
+  background: var(--green);
+  color: #fff;
+  border-color: var(--green);
+}
+
+.followup-btn:disabled {
+  cursor: not-allowed;
+}
+
+/* ── History Card ────────────────────────────────── */
+.history-card {
+  background: var(--bg-white);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px 22px;
+  margin-top: 16px;
+  margin-bottom: 8px;
+}
+
+.history-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.history-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-dark);
+}
+
+.history-subtitle {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.history-row {
+  border: 1.5px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  transition: all var(--transition);
+}
+
+.history-row:hover {
+  border-color: var(--green-border);
+  background: var(--green-pale);
+}
+
+.history-row-inner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.history-domain {
+  flex: 1;
+  font-size: 13px;
+  color: var(--text-body);
+  font-weight: 500;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.history-verdict {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 100px;
+  flex-shrink: 0;
+}
+
+.history-verdict.v-excellent { background: #e6f4eb; color: var(--v-excellent); }
+.history-verdict.v-good      { background: var(--green-light); color: var(--green-dark); }
+.history-verdict.v-uncertain { background: var(--gold-light); color: var(--v-uncertain); }
+.history-verdict.v-suspicious { background: #fde8d8; color: var(--v-suspicious); }
+.history-verdict.v-bad       { background: #fde8e8; color: var(--v-bad); }
+
+.history-score {
+  font-size: 13px;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+
+.history-score.score-high { color: var(--v-excellent); }
+.history-score.score-mid  { color: var(--v-uncertain); }
+.history-score.score-low  { color: var(--v-bad); }
+
 /* ── Responsive ─────────────────────────────────── */
 @media (max-width: 600px) {
   .hero-section h1 {

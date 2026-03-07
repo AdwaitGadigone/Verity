@@ -21,7 +21,7 @@ WHAT IT CHECKS (4 sub-checks):
 """
 
 from datetime import datetime
-from gemini_client import call_gemini  # Our shared Gemini API connection
+from gemini_client import call_gemini, get_batch_result  # Our shared Gemini API connection
 
 
 # ── SUB-CHECK 1: Extract the Core Claim ──────────────────────────────────────
@@ -228,28 +228,30 @@ def analyze(article_data: dict) -> dict:
     if not text:
         return {"score": 40, "reason": "No article text available for fact verification", "core_claim": ""}
 
-    # Step 1: What claim does this article make?
+    # Check mega cache first — covers claim extraction + verification in one shot
+    cached = get_batch_result(text, title, "factual")
+    if cached and "score" in cached:
+        core_claim = cached.get("core_claim", "")
+        verify_score = max(0, min(100, int(cached["score"])))
+        verify_reason = cached.get("reason", "")
+
+        # Date check is always rule-based (no API call)
+        date_score, date_reason = _check_date_recency(str(publish_date) if publish_date else "")
+
+        final_score = int(round(verify_score * 0.70 + date_score * 0.30))
+        reason = verify_reason if date_score >= 30 else f"{date_reason}. {verify_reason}."
+        return {"score": final_score, "reason": reason, "core_claim": core_claim}
+
+    # Fallback: run the original 3-call flow if mega cache missed
     core_claim = _extract_core_claim(text, title)
-
-    # Step 2: Is that claim actually true?
     verify_score, verify_reason = _verify_claim_with_gemini(core_claim)
-
-    # Step 3: Is the article dated and current?
-    date_score, date_reason = _check_date_recency(
-        str(publish_date) if publish_date else ""
-    )
-
-    # Step 4: Is this an extraordinary claim without evidence?
+    date_score, date_reason = _check_date_recency(str(publish_date) if publish_date else "")
     extra_score, extra_reason = _check_extraordinary_claim(text, title, core_claim)
 
-    # Combine — verification gets highest weight (it's the core check)
     final_score = int(round(
-        verify_score * 0.55 +
-        date_score * 0.20 +
-        extra_score * 0.25
+        verify_score * 0.55 + date_score * 0.20 + extra_score * 0.25
     ))
 
-    # Pick the most important finding as the reason
     if verify_score < 35:
         reason = verify_reason
     elif extra_score < 20:

@@ -25,7 +25,7 @@ LOW SCORE = the article is emotionally manipulative (bad)
 """
 
 import re                        # Regular expressions — pattern matching in text
-from gemini_client import call_gemini  # Our shared Gemini API connection
+from gemini_client import call_gemini, get_batch_result  # Our shared Gemini API connection
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -162,14 +162,18 @@ def _score_clickbait(title: str, text: str) -> tuple:
 def _score_emotional_with_gemini(text: str, title: str = "") -> tuple:
     """
     Uses Gemini AI to analyze the article's emotional tone at a deeper level.
-    Gemini can catch subtle emotional manipulation that simple pattern matching
-    (regex) misses — like fear-mongering through word choice.
+    Checks the batch cache first (primed by scorer.py) before making a new call.
 
     Returns (score 0-100, reason). 100 = completely neutral/factual.
     """
-    # Send first 2000 characters to Gemini (enough for tone analysis)
-    sample = f"HEADLINE: {title}\n\nARTICLE EXCERPT:\n{text[:2000]}"
+    # Check batch cache first — avoids a separate Gemini API call
+    cached = get_batch_result(text, title, "emotional")
+    if cached and "score" in cached:
+        score = max(0, min(100, int(cached["score"])))
+        return score, cached.get("reason", "Gemini emotional analysis complete")
 
+    # Fallback: make a direct Gemini call if batch cache missed
+    sample = f"HEADLINE: {title}\n\nARTICLE EXCERPT:\n{text[:2000]}"
     prompt = f"""
 You are analyzing an article for emotional manipulation as part of a Canadian misinformation detection tool.
 
@@ -189,7 +193,6 @@ Article:
 Respond with ONLY valid JSON:
 {{"score": <0-100>, "reason": "<2-3 short sentences explaining the emotional tone>"}}
 """
-
     result = call_gemini(prompt)
     if result and "score" in result:
         score = max(0, min(100, int(result["score"])))

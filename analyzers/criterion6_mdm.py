@@ -24,7 +24,7 @@ we can point to the official ITSAP document and say "our tool classifies
 articles using the exact same categories the Canadian government uses."
 """
 
-from gemini_client import call_gemini  # Our shared Gemini API connection
+from gemini_client import call_gemini, get_batch_result  # Our shared Gemini API connection
 
 
 # ── Score mapping — directly from ITSAP.00.300 definitions ──────────────────
@@ -68,10 +68,14 @@ def analyze(article_data: dict) -> dict:
             "classification": "Unsustainable"
         }
 
-    # Combine the headline and first 2000 characters for Gemini to analyze
-    sample = f"HEADLINE: {title}\n\nARTICLE TEXT (first 2000 chars):\n{text[:2000]}"
-
-    prompt = f"""
+    # Check batch cache first (primed by scorer.py before criteria run)
+    cached = get_batch_result(text, title, "mdm")
+    if cached and "classification" in cached:
+        result = cached
+    else:
+        # Fallback: direct Gemini call
+        sample = f"HEADLINE: {title}\n\nARTICLE TEXT (first 2000 chars):\n{text[:2000]}"
+        prompt = f"""
 You are a misinformation analyst for a Canadian cybersecurity tool.
 Classify this article using the MDM framework from the Canadian Centre
 for Cyber Security (ITSAP.00.300).
@@ -92,8 +96,7 @@ Respond with ONLY valid JSON:
   "reason": "<2-3 short sentences explaining why this classification applies>"
 }}
 """
-
-    result = call_gemini(prompt)
+        result = call_gemini(prompt)
 
     if result and "classification" in result:
         classification = result["classification"]
