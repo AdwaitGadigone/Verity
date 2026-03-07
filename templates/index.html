@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Verity &mdash; Canadian Misinformation Detector</title>
+    <title>Verity &mdash; Canada's Misinformation Detector</title>
     <meta name="description"
         content="Verity scores articles across 6 criteria from Canada's official cybersecurity guidelines." />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -17,13 +17,12 @@
 <body>
 
     <!-- ═══════════════════════════════════════════════════════
-       SITE HEADER — solid green, gold bottom line
-       Clicking "Verity" resets to input screen via resetToInput()
+       SITE HEADER — sticky, dark, always visible
   ═══════════════════════════════════════════════════════════ -->
     <header class="site-header">
         <div class="header-inner">
 
-            <div class="logo" onclick="resetToInput()" role="button" tabindex="0" title="Return to home"
+            <div class="logo" onclick="goToLanding()" role="button" tabindex="0" title="Return to home"
                 aria-label="Verity home">
                 <img src="/static/key_logo.png" alt="Verity Logo" class="logo-img" />
             </div>
@@ -33,6 +32,7 @@
 
             <div class="header-right">
                 <span class="header-badge">Canada's Misinformation Detector</span>
+                <button class="header-cta-btn" onclick="showAnalyzer()">Try Verity &rarr;</button>
             </div>
 
         </div>
@@ -41,15 +41,216 @@
     <main>
 
         <!-- ═══════════════════════════════════════════════════
-         INPUT SECTION
-    ═══════════════════════════════════════════════════════ -->
-        <section id="input-section" class="input-section">
+         LANDING PAGE SECTION
+        ═══════════════════════════════════════════════════════ -->
+        <section id="landing-section">
 
-            <!-- Hero — solid green, enough bottom padding -->
+            <!-- ── Hero ──────────────────────────────────── -->
+            <div class="lp-hero">
+                <div class="lp-container">
+                    <div class="lp-hero-inner">
+
+                        <div class="lp-hero-text">
+                            <div class="lp-eyebrow">
+                                <span>&#127464;&#127462;</span>
+                                Based on Canadian Government Standards (ITSAP.00.300)
+                            </div>
+                            <h1 class="lp-hero-h1">
+                                Verify News.<br>
+                                <em class="lp-hero-em">Before You Share.</em>
+                            </h1>
+                            <p class="lp-hero-p">
+                                Verity scores any news article across <strong>6 criteria</strong> from
+                                Canada&rsquo;s official cybersecurity guidelines &mdash; telling you exactly
+                                what to trust and what to question.
+                            </p>
+                            <div class="lp-cta-row">
+                                <button class="lp-btn-primary" onclick="showAnalyzer()">
+                                    Analyze an Article &nbsp;&rarr;
+                                </button>
+                                <a class="lp-btn-ghost" href="#lp-how">How it works &darr;</a>
+                            </div>
+                            <div class="lp-stats-row">
+                                <div class="lp-stat">
+                                    <span class="lp-stat-n">6</span>
+                                    <span class="lp-stat-l">Criteria</span>
+                                </div>
+                                <div class="lp-stat-div"></div>
+                                <div class="lp-stat">
+                                    <span class="lp-stat-n">AI</span>
+                                    <span class="lp-stat-l">Powered</span>
+                                </div>
+                                <div class="lp-stat-div"></div>
+                                <div class="lp-stat">
+                                    <span class="lp-stat-n">0&ndash;100</span>
+                                    <span class="lp-stat-l">Score</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Animated demo card -->
+                        <div class="lp-hero-card">
+                            <div class="lp-demo-card">
+                                <div class="lp-demo-header">
+                                    <span>&#128269; Verity Analysis</span>
+                                    <span class="lp-demo-live">&#9679; LIVE</span>
+                                </div>
+                                <div class="lp-demo-score-row">
+                                    <span class="lp-demo-num">78</span>
+                                    <div>
+                                        <div class="lp-demo-verdict">Likely Credible</div>
+                                        <div class="lp-demo-src">theglobeandmail.com</div>
+                                    </div>
+                                </div>
+                                <div class="lp-demo-bars">
+                                    <div class="lp-demo-bar-row">
+                                        <span>&#127963; Domain</span>
+                                        <div class="lp-demo-track"><div class="lp-demo-fill" style="--w:85%"></div></div>
+                                        <span>85</span>
+                                    </div>
+                                    <div class="lp-demo-bar-row">
+                                        <span>&#128269; Factual</span>
+                                        <div class="lp-demo-track"><div class="lp-demo-fill" style="--w:76%"></div></div>
+                                        <span>76</span>
+                                    </div>
+                                    <div class="lp-demo-bar-row">
+                                        <span>&#128172; Emotional</span>
+                                        <div class="lp-demo-track"><div class="lp-demo-fill" style="--w:82%"></div></div>
+                                        <span>82</span>
+                                    </div>
+                                    <div class="lp-demo-bar-row">
+                                        <span>&#9997; Author</span>
+                                        <div class="lp-demo-track"><div class="lp-demo-fill" style="--w:71%"></div></div>
+                                        <span>71</span>
+                                    </div>
+                                </div>
+                                <div class="lp-demo-footer">
+                                    Classified: <strong>Valid</strong> &bull; ITSAP.00.300
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+
+            <!-- ── How It Works ───────────────────────── -->
+            <div id="lp-how" class="lp-section lp-how-section">
+                <div class="lp-container">
+                    <div class="lp-section-hdr">
+                        <h2>How It Works</h2>
+                        <p>Three steps to smarter news consumption</p>
+                    </div>
+                    <div class="lp-steps">
+                        <div class="lp-step">
+                            <div class="lp-step-num">1</div>
+                            <div class="lp-step-icon">&#128206;</div>
+                            <h3>Paste URL or Text</h3>
+                            <p>Submit any news article &mdash; paste the URL or copy-paste the full article text directly into Verity.</p>
+                        </div>
+                        <div class="lp-step-arrow">&rarr;</div>
+                        <div class="lp-step">
+                            <div class="lp-step-num">2</div>
+                            <div class="lp-step-icon">&#129302;</div>
+                            <h3>AI Runs 6 Checks</h3>
+                            <p>Gemini AI analyzes the article against Canada&rsquo;s ITSAP.00.300 cybersecurity framework &mdash; all six criteria in parallel.</p>
+                        </div>
+                        <div class="lp-step-arrow">&rarr;</div>
+                        <div class="lp-step">
+                            <div class="lp-step-num">3</div>
+                            <div class="lp-step-icon">&#128202;</div>
+                            <h3>Get Your Score</h3>
+                            <p>Receive a 0&ndash;100 credibility score, MDM threat classification, neutral summary, and AI voice readout.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ── 6 Criteria ──────────────────────────── -->
+            <div class="lp-section lp-crit-section">
+                <div class="lp-container">
+                    <div class="lp-section-hdr">
+                        <h2>6 Criteria. One Score.</h2>
+                        <p>Based on the Canadian Centre for Cyber Security ITSAP.00.300 framework</p>
+                    </div>
+                    <div class="lp-crit-grid">
+                        <div class="lp-crit-card">
+                            <div class="lp-crit-top">
+                                <span class="lp-crit-icon">&#127963;</span>
+                                <span class="lp-crit-w">20%</span>
+                            </div>
+                            <h3>Website Trustworthiness</h3>
+                            <p>Domain reputation, site age, and publisher credibility verified against known reliable sources.</p>
+                        </div>
+                        <div class="lp-crit-card">
+                            <div class="lp-crit-top">
+                                <span class="lp-crit-icon">&#128172;</span>
+                                <span class="lp-crit-w">20%</span>
+                            </div>
+                            <h3>Sensationalism &amp; Clickbait</h3>
+                            <p>Detects emotionally manipulative language, fear tactics, and misleading headlines.</p>
+                        </div>
+                        <div class="lp-crit-card">
+                            <div class="lp-crit-top">
+                                <span class="lp-crit-icon">&#128269;</span>
+                                <span class="lp-crit-w">25%</span>
+                            </div>
+                            <h3>Fact-Checking &amp; Accuracy</h3>
+                            <p>AI cross-references key claims against established facts and verifiable sources.</p>
+                        </div>
+                        <div class="lp-crit-card">
+                            <div class="lp-crit-top">
+                                <span class="lp-crit-icon">&#9997;</span>
+                                <span class="lp-crit-w">15%</span>
+                            </div>
+                            <h3>Author Verifiability</h3>
+                            <p>Checks if authors are identifiable, credentialed journalists with verifiable track records.</p>
+                        </div>
+                        <div class="lp-crit-card">
+                            <div class="lp-crit-top">
+                                <span class="lp-crit-icon">&#128196;</span>
+                                <span class="lp-crit-w">10%</span>
+                            </div>
+                            <h3>Content Quality</h3>
+                            <p>Evaluates writing quality, source citations, image integrity, and professional publishing standards.</p>
+                        </div>
+                        <div class="lp-crit-card">
+                            <div class="lp-crit-top">
+                                <span class="lp-crit-icon">&#127464;&#127462;</span>
+                                <span class="lp-crit-w">10%</span>
+                            </div>
+                            <h3>Threat Classification</h3>
+                            <p>MDM framework: classifies content as Valid, Misinformation, Disinformation, or Malinformation.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ── Bottom CTA ──────────────────────────── -->
+            <div class="lp-section lp-bottom-cta">
+                <div class="lp-container">
+                    <h2 class="lp-cta-h2">Ready to verify?</h2>
+                    <p class="lp-cta-sub">Paste any news URL and get a credibility score in seconds &mdash; free.</p>
+                    <button class="lp-btn-primary lp-btn-lg" onclick="showAnalyzer()">
+                        Start Analyzing &nbsp;&rarr;
+                    </button>
+                    <p class="lp-cta-note">
+                        Powered by Google Gemini &middot; ElevenLabs &middot; Groq &middot; Backboard.io
+                    </p>
+                </div>
+            </div>
+
+        </section>
+
+        <!-- ═══════════════════════════════════════════════════
+         INPUT SECTION — hidden by default, shown via showAnalyzer()
+        ═══════════════════════════════════════════════════════ -->
+        <section id="input-section" class="input-section" style="display:none">
+
+            <!-- Hero — solid green -->
             <div class="hero-section">
                 <div class="container">
                     <div class="hero-eyebrow">&#11088; AI-Powered Fact Check</div>
-                    <!-- "news" is plain white (no gold highlighting) -->
                     <h1>Is this news trustworthy?</h1>
                     <p class="hero-subtitle">
                         Paste a URL or article text. Verity scores it across
@@ -126,7 +327,7 @@
 
         <!-- ═══════════════════════════════════════════════════
          LOADING SECTION
-    ═══════════════════════════════════════════════════════ -->
+        ═══════════════════════════════════════════════════════ -->
         <section id="loading-section" class="loading-section" style="display:none" aria-live="polite">
             <div class="container">
                 <div class="loader-ring"></div>
@@ -145,9 +346,7 @@
 
         <!-- ═══════════════════════════════════════════════════
          RESULTS SECTION
-         IMPORTANT: all id="" values here must match exactly
-         what renderResults() in script.js looks for.
-    ═══════════════════════════════════════════════════════ -->
+        ═══════════════════════════════════════════════════════ -->
         <section id="results-section" class="results-section" style="display:none">
             <div class="container">
 
@@ -237,7 +436,7 @@
 
     </main>
 
-    <!-- Footer — team names included -->
+    <!-- Footer -->
     <footer class="site-footer">
         <p>
             Criteria based on
