@@ -11,3 +11,4 @@ env/
 # OS
 .DS_Store
 Thumbs.db
+.backboard_config.json
