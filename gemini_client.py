@@ -75,6 +75,21 @@ def prime_mega_cache(article_text: str, title: str, author_name: str) -> bool:
 
     prompt = f"""You are an expert Canadian misinformation analyst using the ITSAP.00.300 framework from the Canadian Centre for Cyber Security. Analyze the article below and return a single JSON object covering ALL criteria.
 
+TRUSTED CANADIAN SOURCES (score these highly — they are institutional, credible outlets):
+- Government: canada.ca, gc.ca, cyber.gc.ca, statcan.gc.ca, healthcanada.gc.ca, parl.gc.ca
+- Public broadcasters: cbc.ca, radio-canada.ca
+- Major newspapers: theglobeandmail.com, thestar.com, nationalpost.com, macleans.ca, globalnews.ca
+- Wire services: reuters.com, apnews.com, afp.com
+For these sources: emotional score should be 75+, author score 80+, MDM classification should be "Valid" unless there is explicit factual error.
+
+MDM CLASSIFICATION GUIDE (ITSAP.00.300):
+- Valid: Factually accurate reporting from a credible source, even if covering controversial topics
+- Misinformation: Contains specific factual errors NOT intentional (e.g. wrong statistics cited)
+- Malinformation: Factually true but framed to mislead or harm (e.g. selective quoting)
+- Disinformation: Deliberately fabricated content designed to deceive
+- Unsustainable: Claims that cannot be verified or disproved with available information
+NOTE: War/conflict reporting from established outlets is typically "Valid" or "Unsustainable", NOT "Misinformation".
+
 {author_info}
 {sample}
 
@@ -101,13 +116,12 @@ Return ONLY this JSON structure (no markdown, no extra text):
     "score": <0-100, 90-100=confirmed by multiple reliable sources, 0-29=contradicted by sources>,
     "reason": "<2 sentences on whether the core claim is accurate per reputable Canadian sources>"
   }},
-  "final_score": <0-100 overall credibility>,
   "verdict_subtext": "<one sentence stating the content type and overall credibility assessment>",
   "neutral_summary": "<4-5 paragraphs in plain, objective language with zero emotional framing. Paragraph 1: what the article claims. Paragraph 2: evidence cited (sources, data, quotes used). Paragraph 3: broader context and background. Paragraph 4: what the article omits, disputes, or leaves unverified. Paragraph 5: one-sentence plain-English takeaway. Separate paragraphs with \\n\\n. Do NOT use loaded words or the article's own emotional framing.>"
 }}"""
 
     result = call_gemini(prompt)
-    required = ("emotional", "author", "content", "mdm", "factual", "final_score")
+    required = ("emotional", "author", "content", "mdm", "factual")
     if result and all(k in result for k in required):
         _batch_cache[cache_key] = result
         return True
