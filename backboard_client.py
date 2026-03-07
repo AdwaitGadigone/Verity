@@ -332,11 +332,13 @@ class BackboardOrchestrator:
         if root and "final_score" in root:
             final_score = int(root["final_score"])
             verdict_subtext_base = root.get("verdict_subtext", "")
+            neutral_summary = root.get("neutral_summary", "")
         else:
             final_score = int(round(sum(
                 results[k]["score"] * scorer.WEIGHTS[k] for k in scorer.WEIGHTS
             )))
             verdict_subtext_base = ""
+            neutral_summary = ""
 
         # Determine verdict tier
         if final_score >= 90:
@@ -371,6 +373,7 @@ class BackboardOrchestrator:
             "verdict_class":      verdict_class,
             "mdm_classification": classification,
             "core_claim":         fact.get("core_claim", ""),
+            "neutral_summary":    neutral_summary,
             "criteria":           criteria_display,
             "powered_by":         "backboard",
         }
