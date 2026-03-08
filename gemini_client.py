@@ -7,22 +7,6 @@ This file creates ONE shared connection to Google's Gemini AI. Instead of
 each criterion file setting up its own connection (messy and repetitive),
 they all just call `call_gemini("your question here")` from this file.
 
-WHAT IS GEMINI?
-Gemini is Google's AI model (like ChatGPT but made by Google). We send it
-a text prompt (a question) and it sends back an answer. We use it to analyze
-articles for emotional tone, factual accuracy, and more.
-
-WHAT IS AN API?
-API = Application Programming Interface. It's how two programs talk to each
-other over the internet. We send a request to Google's servers, and they
-send back a response. The API key is like a password that proves we're
-allowed to use the service.
-
-WHAT IS JSON?
-JSON = JavaScript Object Notation. It's a standard format for sending data
-between programs. It looks like a Python dictionary:
-  {"score": 85, "reason": "This article is mostly factual"}
-
 We force Gemini to respond in JSON so we can easily extract the score and
 reason from its answer.
 
@@ -135,7 +119,12 @@ Return ONLY this JSON structure (no markdown, no extra text):
     required = ("emotional", "author", "content", "mdm", "factual")
     if result and all(k in result for k in required):
         _batch_cache[cache_key] = result
+        # Debug: show what fields came back
+        print(f"[MegaCache] SUCCESS. Fields: {list(result.keys())}")
+        print(f"[MegaCache] neutral_summary length: {len(result.get('neutral_summary', ''))}")
+        print(f"[MegaCache] core_claim: {result.get('factual', {}).get('core_claim', 'MISSING')[:80]}")
         return True
+    print(f"[MegaCache] FAILED. result={result is not None}, missing={[k for k in required if not result or k not in result]}")
     return False
 
 
@@ -254,7 +243,7 @@ def call_gemini(prompt: str, model: str = "gemini-2.0-flash") -> dict | None:
                 config=genai_types.GenerateContentConfig(
                     response_mime_type="application/json",
                     temperature=0.1,
-                    max_output_tokens=2048,
+                    max_output_tokens=4096,
                 ),
             )
             return json.loads(response.text)

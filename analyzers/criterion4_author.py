@@ -173,6 +173,17 @@ def analyze(article_data: dict) -> dict:
     authors = article_data.get("authors", [])
     text = article_data.get("text", "")
 
+    # If there are no authors, the whole criterion should be N/A.
+    # We still run citations to build reason text, but the final score is neutral
+    # and marked as N/A for the UI.
+    if not authors:
+        return {
+            "score": 50, 
+            "reason": "There is no named author, which reduces accountability. This criterion is Not Applicable.",
+            "is_na": True,
+            "badge_text": "N/A"
+        }
+
     # Run all 3 sub-checks
     byline_score, byline_reason = _score_byline(authors)
     author_name = authors[0] if authors else ""

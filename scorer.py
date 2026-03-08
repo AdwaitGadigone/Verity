@@ -290,6 +290,8 @@ def run_all(article_data: dict) -> dict:
             "weight": "20%",
             "score":  results["domain"]["score"],
             "reason": results["domain"]["reason"],
+            "is_na":  results["domain"].get("is_na", False),
+            "badge_text": results["domain"].get("badge_text", ""),
         },
         {
             "key":    "emotional",
@@ -297,6 +299,8 @@ def run_all(article_data: dict) -> dict:
             "weight": "20%",
             "score":  results["emotional"]["score"],
             "reason": results["emotional"]["reason"],
+            "is_na":  results["emotional"].get("is_na", False),
+            "badge_text": results["emotional"].get("badge_text", ""),
         },
         {
             "key":    "factual",
@@ -304,6 +308,8 @@ def run_all(article_data: dict) -> dict:
             "weight": "25%",
             "score":  results["factual"]["score"],
             "reason": results["factual"]["reason"],
+            "is_na":  results["factual"].get("is_na", False),
+            "badge_text": results["factual"].get("badge_text", ""),
         },
         {
             "key":    "author",
@@ -311,6 +317,8 @@ def run_all(article_data: dict) -> dict:
             "weight": "15%",
             "score":  results["author"]["score"],
             "reason": results["author"]["reason"],
+            "is_na":  results["author"].get("is_na", False),
+            "badge_text": results["author"].get("badge_text", ""),
         },
         {
             "key":    "content",
@@ -318,6 +326,8 @@ def run_all(article_data: dict) -> dict:
             "weight": "10%",
             "score":  results["content"]["score"],
             "reason": results["content"]["reason"],
+            "is_na":  results["content"].get("is_na", False),
+            "badge_text": results["content"].get("badge_text", ""),
         },
         {
             "key":    "mdm",
@@ -325,6 +335,8 @@ def run_all(article_data: dict) -> dict:
             "weight": "10%",
             "score":  results["mdm"]["score"],
             "reason": results["mdm"]["reason"],
+            "is_na":  results["mdm"].get("is_na", False),
+            "badge_text": results["mdm"].get("badge_text", ""),
         },
     ]
 

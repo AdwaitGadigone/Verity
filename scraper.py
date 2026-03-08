@@ -118,54 +118,128 @@ def scrape_url(url: str) -> dict:
             # newspaper4k failed — that's okay, we'll try BeautifulSoup next
             result["error"] = f"newspaper4k failed: {str(e)}"
 
-    # ── STEP 2: If newspaper4k didn't get the text, try BeautifulSoup ────
-    # BeautifulSoup is simpler but more reliable as a fallback.
-    # It just reads ALL the paragraph tags (<p>) from the page.
-    if not result["text"]:
+    # ── STEP 2: Extract text via BeautifulSoup if newspaper4k failed or returned too little text ─────
+    if not result["text"] or len(result["text"]) < 250:
         try:
-            # Download the raw HTML of the page
-            # User-Agent tells the website what "browser" is visiting
-            # (some sites block requests without a User-Agent header)
-            headers = {"User-Agent": "Mozilla/5.0 (compatible; VerityBot/1.0)"}
+            # Use standard browser headers to bypass blockages (like Akamai on Hindustan Times)
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+                "Accept-Language": "en-US,en;q=0.9"
+            }
             response = requests.get(url, timeout=10, headers=headers)
-
-            # Parse the HTML with BeautifulSoup
-            # 'html.parser' is Python's built-in HTML reader
             soup = BeautifulSoup(response.text, "html.parser")
 
-            # Try to get the title from the <title> tag
-            if not result["title"] and soup.title:
-                result["title"] = soup.title.string or ""
+            # Try to get the title from the <title> tag or og:title
+            if not result["title"]:
+                og_title = soup.find("meta", property="og:title")
+                if og_title and og_title.get("content"):
+                    result["title"] = og_title.get("content")
+                elif soup.title:
+                    result["title"] = soup.title.string or ""
 
             # Check for Access Denied or empty titles and fallback to URL slug
             current_title = str(result["title"]).lower() if result["title"] else ""
             if not current_title or "access denied" in current_title or "cloudflare" in current_title:
                 import re
                 from urllib.parse import unquote
-                # Extract the last meaningful part of the path
                 path = urlparse(url).path
-                # Remove trailing slashes and extensions like .html
                 path = re.sub(r'/+$', '', path)
                 slug = path.split('/')[-1]
                 slug = re.sub(r'\.(html|php|aspx|jsp)$', '', slug, flags=re.IGNORECASE)
-                # Remove long trailing IDs common in news URLs (e.g. -101772845653054)
                 slug = re.sub(r'-\d{6,}', '', slug)
-                # Replace dashes with spaces and title case it
                 fallback_title = unquote(slug).replace('-', ' ').title()
                 if fallback_title and len(fallback_title) > 3:
                     result["title"] = fallback_title
 
             # Find ALL <p> (paragraph) tags and combine their text
-            # This gives us the article body text
             paragraphs = soup.find_all("p")
-            result["text"] = " ".join(p.get_text() for p in paragraphs)
+            text_blocks = [p.get_text().strip() for p in paragraphs if p.get_text().strip()]
+            
+            # Many modern news sites (like Hindustan Times) put text in specific divs, not just <p> tags
+            # HT uses "storyParagraph" and "detailPage" classes
+            article_divs = soup.find_all("div", class_=lambda c: c and any(sub in str(c).lower() for sub in ["detail", "story", "article-body", "content", "storyparagraph"]))
+            for div in article_divs:
+                # Don't grab text from the whole massive page container, just the text blocks
+                # We skip huge divs that contain the entire page wrapper by looking at string length
+                div_text = div.get_text(separator=" ", strip=True)
+                if div_text and 50 < len(div_text) < 5000 and div_text not in text_blocks:
+                    text_blocks.append(div_text)
+            
+            # Overwrite the result text if we found more substantial content
+            fresh_text = " ".join(text_blocks)
+            if len(fresh_text) > len(result.get("text", "")):
+                result["text"] = fresh_text
+            
+            # If text is still suspiciously short, use the meta description
+            if len(result["text"]) < 200:
+                og_desc = soup.find("meta", property="og:description")
+                if og_desc and og_desc.get("content"):
+                    desc = og_desc.get("content").strip()
+                    if desc not in result["text"]:
+                        result["text"] = desc + ". " + result["text"]
 
-            # If BeautifulSoup got text, clear the error from Step 1
             if result["text"]:
                 result["error"] = None
-
         except Exception as e:
             result["error"] = f"All scrapers failed: {str(e)}"
+            
+    # ── STEP 3: Fallback Author Extraction via HTML Meta Tags ────────────
+    # Even if newspaper4k got the text, it often misses authors.
+    # We always do a quick HTML parse to find author tags if they're missing.
+    if not result["authors"]:
+        try:
+            # Use same bypass headers
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+                "Accept-Language": "en-US,en;q=0.9"
+            }
+            # Only fetch if we didn't already fetch it in Step 2
+            if not result["text"]: 
+                pass # Handled above
+            else:
+                response = requests.get(url, timeout=10, headers=headers)
+                soup = BeautifulSoup(response.text, "html.parser")
+                
+            authors_found = []
+            
+            # Check for multiple tags of the same type (like multiple dc.creator tags)
+            meta_names = ["author", "byl", "dc.creator"]
+            for name in meta_names:
+                tags = soup.find_all("meta", {"name": name})
+                for tag in tags:
+                    content = tag.get("content")
+                    if content and content.strip() and content.strip() not in authors_found:
+                        authors_found.append(content.strip())
+            
+            if not authors_found:
+                # Also check property="article:author"
+                tags = soup.find_all("meta", {"property": "article:author"})
+                for tag in tags:
+                    content = tag.get("content")
+                    if content and content.strip() and content.strip() not in authors_found:
+                        authors_found.append(content.strip())
+                        
+            if not authors_found:
+                # Check rel="author" links or class="author" elements
+                tags = soup.find_all("a", {"rel": "author"}) + \
+                       soup.find_all(attrs={"class": lambda c: c and "author" in str(c).lower()})
+                for tag in tags:
+                    content = tag.get("content") or tag.get_text()
+                    if content and content.strip() and content.strip() not in authors_found:
+                        authors_found.append(content.strip())
+
+            if authors_found:
+                # Sometimes authors are comma-separated within a single tag
+                final_authors = []
+                for a in authors_found:
+                    cleaned = a.replace(" and ", ",")
+                    final_authors.extend([x.strip() for x in cleaned.split(",") if x.strip()])
+                result["authors"] = list(dict.fromkeys(final_authors)) # remove duplicates
+        except Exception:
+            pass
+
 
     # ── STEP 3: Fetch the homepage HTML ──────────────────────────────────
     # We need the homepage to check for About Us / Contact / Privacy pages

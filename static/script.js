@@ -230,12 +230,22 @@ function renderResults(data) {
     list.innerHTML = "";
     (data.criteria || []).forEach(c => {
       const score = c.score || 0;
-      const tier = score >= 72 ? "score-high" : score >= 45 ? "score-mid" : "score-low";
+      
+      let tier = score >= 72 ? "score-high" : score >= 45 ? "score-mid" : "score-low";
+      let badgeText = score + "/100";
+      let barDisplay = "";
+      let barWidth = score;
+
+      if (data.is_undeterminable) {
+          badgeText = "N/A / 100";
+          barDisplay = 'style="display:none"';
+      } else if (c.is_na) {
+          tier = "score-mid"; // Neutral colour for N/A
+          badgeText = c.badge_text || "N/A";
+          barDisplay = 'style="display:none"';
+      }
+
       const icon = CRITERION_ICONS[c.key] || "📊";
-
-      const badgeText = data.is_undeterminable ? "N/A / 100" : (score + "/100");
-
-      const barDisplay = data.is_undeterminable ? 'style="display:none"' : '';
 
       const row = document.createElement("div");
       row.className = "criterion-row " + tier;
@@ -249,7 +259,7 @@ function renderResults(data) {
         '<span class="criterion-score-badge">' + badgeText + '</span>' +
         '</div>' +
         '<div class="progress-track" ' + barDisplay + '>' +
-        '<div class="progress-fill" data-width="' + score + '%" style="width:0%"></div>' +
+        '<div class="progress-fill" data-width="' + barWidth + '%" style="width:0%"></div>' +
         '</div>' +
         '<div class="criterion-reason">' + esc(c.reason) + '</div>';
       list.appendChild(row);

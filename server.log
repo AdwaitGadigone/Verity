@@ -1,0 +1,10 @@
+[Groq] Fallback client ready (llama-3.3-70b-versatile).
+[Groq] Fallback client ready (llama-3.3-70b-versatile).
+[Backboard] Ready — 4 agents initialized with semantic memory.
+============================================================
+Verity -- Canadian Misinformation Detection Tool
+   Powered by Canadian Centre for Cyber Security (ITSAP.00.300)
+   Running at: http://localhost:5000
+============================================================
+ * Serving Flask app 'app'
+ * Debug mode: on
