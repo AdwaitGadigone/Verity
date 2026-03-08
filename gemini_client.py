@@ -93,8 +93,19 @@ NOTE: War/conflict reporting from established outlets is typically "Valid" or "U
 {author_info}
 {sample}
 
+UNDETERMINABLE CONTENT DETECTION:
+Some content is inherently NOT verifiable for factual credibility. You MUST flag these as undeterminable:
+- Religious texts, sermons, theological arguments, spiritual teachings, faith-based claims (e.g. "God exists", "prayer heals")
+- Pure opinion pieces, editorials, or op-eds that are ENTIRELY subjective with no verifiable factual claims
+- Personal essays, philosophical musings, or motivational content that is purely subjective
+- Astrology, horoscopes, paranormal claims, or supernatural content
+- Poetry, fiction, creative writing presented as non-news content
+IMPORTANT: Do NOT flag as undeterminable if the content contains ANY verifiable factual claims, even if it's also opinionated. A political opinion column that cites statistics or makes factual assertions IS verifiable. Only flag content where there is genuinely NO way to assess factual credibility because the content is entirely belief-based or subjective.
+
 Return ONLY this JSON structure (no markdown, no extra text):
 {{
+  "is_undeterminable": <true if the content is purely religious, spiritual, opinion-only, or subjective with zero verifiable claims; false otherwise>,
+  "undeterminable_reason": "<If is_undeterminable is true, explain in 1-2 sentences why credibility cannot be determined (e.g. 'This is a religious sermon containing faith-based claims that cannot be empirically verified.'). Empty string if false.>",
   "emotional": {{
     "score": <0-100, 100=completely neutral, 0=extremely manipulative>,
     "reason": "<2 sentences on emotional tone and clickbait>"
