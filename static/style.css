@@ -343,6 +343,7 @@ a:hover {
 
 .analyze-btn:hover {
   background: var(--green-dark);
+  box-shadow: 0 4px 16px rgba(26, 127, 75, 0.3);
 }
 
 .analyze-btn:active {
@@ -707,7 +708,8 @@ a:hover {
 
 /* ── CACHE BADGE ────────────────────────────────── */
 .cache-badge {
-  display: inline-block;
+  display: block;
+  text-align: center;
   background: var(--green);
   color: #fff;
   font-size: 12px;
@@ -735,7 +737,7 @@ a:hover {
   gap: 8px;
   padding: 14px 18px;
   border-bottom: 1px solid var(--border);
-  background: var(--bg-light);
+  background: var(--bg);
 }
 
 .neutral-summary-icon {
@@ -745,7 +747,7 @@ a:hover {
 .neutral-summary-title {
   font-size: 14px;
   font-weight: 700;
-  color: var(--text-heading);
+  color: var(--text-dark);
   flex: 1;
 }
 
@@ -981,7 +983,7 @@ a:hover {
 .progress-fill {
   height: 100%;
   border-radius: 100px;
-  transition: width 0.85s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: width 0.55s cubic-bezier(0.4, 0, 0.2, 1);
   width: 0%;
 }
 
@@ -1598,11 +1600,14 @@ a:hover {
   width: 0%;
   background: linear-gradient(90deg, #1a7f4b, #4ade80);
   border-radius: 100px;
-  animation: lp-bar-fill 1.4s cubic-bezier(0.4, 0, 0.2, 1) forwards;
-  animation-delay: 0.3s;
+  animation: lp-bar-fill 1.2s cubic-bezier(0.4, 0, 0.2, 1) forwards;
 }
 
-.lp-demo-fill:nth-child(1) { animation-delay: 0.3s; }
+/* Staggered delays — each bar fills in sequence */
+.lp-demo-bars .lp-demo-bar-row:nth-child(1) .lp-demo-fill { animation-delay: 0.2s; }
+.lp-demo-bars .lp-demo-bar-row:nth-child(2) .lp-demo-fill { animation-delay: 0.55s; }
+.lp-demo-bars .lp-demo-bar-row:nth-child(3) .lp-demo-fill { animation-delay: 0.9s; }
+.lp-demo-bars .lp-demo-bar-row:nth-child(4) .lp-demo-fill { animation-delay: 1.2s; }
 
 @keyframes lp-bar-fill {
   to { width: var(--w, 80%); }

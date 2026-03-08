@@ -339,8 +339,13 @@ async function readVerdictAloud() {
 // ══════════════════════════════════════════════════════════════════
 function stopAudio() {
   if (currentAudio) {
+    currentAudio.onended = null;  // prevent double-cleanup via dispatch
     currentAudio.pause();
-    currentAudio.dispatchEvent(new Event("ended"));
+    currentAudio = null;
+    const stopBtn = el("stop-btn");
+    const speakBtn = el("speak-btn");
+    if (stopBtn) stopBtn.style.display = "none";
+    if (speakBtn) { speakBtn.textContent = "\uD83D\uDD0A Read Verdict Aloud"; speakBtn.disabled = false; }
   }
 }
 
@@ -393,8 +398,13 @@ async function readSummaryAloud() {
 
 function stopSummaryAudio() {
   if (summaryAudio) {
+    summaryAudio.onended = null;  // prevent double-cleanup
     summaryAudio.pause();
-    summaryAudio.dispatchEvent(new Event("ended"));
+    summaryAudio = null;
+    const stopBtn = el("summary-stop-btn");
+    const speakBtn = el("summary-speak-btn");
+    if (stopBtn) stopBtn.style.display = "none";
+    if (speakBtn) { speakBtn.textContent = "\uD83D\uDD0A Read"; speakBtn.disabled = false; }
   }
 }
 
@@ -403,8 +413,8 @@ function stopSummaryAudio() {
 // RESET — called by logo click or "Analyze Another Article"
 // ══════════════════════════════════════════════════════════════════
 function resetToInput() {
-  if (currentAudio) { currentAudio.pause(); currentAudio = null; }
-  if (summaryAudio) { summaryAudio.pause(); summaryAudio = null; }
+  if (currentAudio) { currentAudio.onended = null; currentAudio.pause(); currentAudio = null; }
+  if (summaryAudio) { summaryAudio.onended = null; summaryAudio.pause(); summaryAudio = null; }
   lastResult = null;
   isPlayingExplain = false;
   const ui = el("url-input"); if (ui) ui.value = "";
@@ -412,6 +422,9 @@ function resetToInput() {
   const followup = el("followup-buttons");
   if (followup) followup.style.display = "none";
   document.querySelectorAll(".error-banner").forEach(b => b.remove());
+  // Clear loading checklist done-state for the next analysis
+  ["lc-domain","lc-emotional","lc-factual","lc-author","lc-content","lc-mdm"]
+    .forEach(id => { const e = el(id); if (e) e.classList.remove("done"); });
   showSection("input-section");
 }
 
@@ -578,11 +591,16 @@ function showFollowUpButtons() {
 }
 
 
-// Enter key on URL field → analyze
+// Enter key on URL and text fields → analyze
 document.addEventListener("DOMContentLoaded", () => {
   const urlInput = el("url-input");
   if (urlInput) urlInput.addEventListener("keydown", e => {
     if (e.key === "Enter") runAnalysis();
+  });
+
+  const textInput = el("text-input");
+  if (textInput) textInput.addEventListener("keydown", e => {
+    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) runAnalysis();
   });
 
   // Show landing page on initial load

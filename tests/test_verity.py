@@ -827,3 +827,163 @@ class TestGroqIntegration:
         key = hashlib.md5((FAKE_CLICKBAIT_ARTICLE["text"][:3000] + FAKE_CLICKBAIT_ARTICLE["title"]).encode()).hexdigest()
         root = gemini_client._batch_cache.get(key)
         assert root.get("emotional", {}).get("score", 100) < 60
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# FRONTEND HTML STRUCTURE — static analysis of rendered HTML
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestFrontendHTML:
+    """
+    Parses the HTML returned by GET / and verifies the element structure
+    that script.js depends on.  Fast, no real API calls needed.
+    """
+
+    def setup_method(self):
+        from unittest.mock import patch, MagicMock
+        with patch.dict("sys.modules", {
+            "backboard_client": MagicMock(
+                orchestrator=MagicMock(run=MagicMock(return_value=None))
+            ),
+        }):
+            import app as flask_app
+            flask_app.app.config["TESTING"] = True
+            self.client = flask_app.app.test_client()
+
+        resp = self.client.get("/")
+        assert resp.status_code == 200
+        from bs4 import BeautifulSoup
+        self.soup = BeautifulSoup(resp.data, "html.parser")
+
+    def test_landing_section_present(self):
+        """Landing section must exist as the default visible section."""
+        assert self.soup.find(id="landing-section") is not None
+
+    def test_input_section_starts_hidden(self):
+        """Analyzer input section must be hidden until the user navigates to it."""
+        section = self.soup.find(id="input-section")
+        assert section is not None
+        style = section.get("style", "")
+        assert "display:none" in style.replace(" ", "")
+
+    def test_loading_section_starts_hidden(self):
+        section = self.soup.find(id="loading-section")
+        assert section is not None
+        style = section.get("style", "")
+        assert "display:none" in style.replace(" ", "")
+
+    def test_results_section_starts_hidden(self):
+        section = self.soup.find(id="results-section")
+        assert section is not None
+        style = section.get("style", "")
+        assert "display:none" in style.replace(" ", "")
+
+    def test_required_element_ids_present(self):
+        """All IDs that script.js references must exist in the rendered HTML."""
+        required_ids = [
+            "verdict-banner", "result-verdict-title", "result-score",
+            "result-mdm-badge", "result-verdict-subtext",
+            "criteria-list", "neutral-summary-section", "neutral-summary-body",
+            "cache-badge", "core-claim-section", "core-claim-text",
+            "url-input", "text-input", "analyze-btn",
+            "tab-url", "tab-text", "input-url-wrapper", "input-text-wrapper",
+            "speak-btn", "stop-btn", "followup-buttons",
+            "summary-speak-btn", "summary-stop-btn", "summary-toggle-btn",
+            "lc-domain", "lc-emotional", "lc-factual",
+            "lc-author", "lc-content", "lc-mdm",
+            "loading-checklist", "history-container", "history-list",
+            "result-article-title",
+        ]
+        missing = [id_ for id_ in required_ids if self.soup.find(id=id_) is None]
+        assert missing == [], f"Missing element IDs: {missing}"
+
+    def test_onclick_functions_defined_in_script(self):
+        """Every function referenced in an onclick= attribute must be defined in script.js."""
+        import re
+        # Collect all onclick values from the HTML
+        onclick_values = [
+            tag.get("onclick", "")
+            for tag in self.soup.find_all(True)
+            if tag.get("onclick")
+        ]
+        # Extract bare function names like foo() or foo('bar')
+        called = set()
+        for v in onclick_values:
+            match = re.match(r"([a-zA-Z_]\w*)\s*\(", v)
+            if match:
+                called.add(match.group(1))
+
+        # Read script.js and find all top-level function definitions (sync + async)
+        script_path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "static", "script.js"
+        )
+        with open(script_path) as f:
+            script_src = f.read()
+        defined = set(re.findall(r"^(?:async\s+)?function\s+(\w+)\s*\(", script_src, re.MULTILINE))
+
+        missing = called - defined
+        assert missing == set(), f"onclick functions not defined in script.js: {missing}"
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# FRONTEND CSS — static analysis of style.css
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestFrontendCSS:
+    """
+    Reads style.css as plain text and verifies design-system invariants.
+    """
+
+    def setup_method(self):
+        import re
+        css_path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "static", "style.css"
+        )
+        with open(css_path) as f:
+            self.css = f.read()
+        self.re = re
+
+    def _root_vars(self):
+        """Return the set of CSS variable names defined inside :root { ... }."""
+        m = self.re.search(r":root\s*\{([^}]+)\}", self.css)
+        if not m:
+            return set()
+        return set(self.re.findall(r"(--.+?):", m.group(1)))
+
+    def test_no_undefined_css_variables(self):
+        """Every var(--foo) used in style.css must be declared in :root.
+        Exception: single-letter properties like --w are inline element parameters
+        set via style="" attributes, not :root declarations."""
+        used = set(self.re.findall(r"var\((--[\w-]+)", self.css))
+        defined = self._root_vars()
+        # Exclude single-character inline parameters (e.g. --w used as animation target)
+        inline_params = {v for v in used if len(v) <= 3}
+        undefined = (used - defined) - inline_params
+        assert undefined == set(), f"CSS variables used but never defined in :root: {undefined}"
+
+    def test_bg_light_not_referenced(self):
+        """Bug #1: --bg-light was undefined; confirm it is no longer referenced."""
+        assert "--bg-light" not in self.css
+
+    def test_text_heading_not_referenced(self):
+        """Bug #1: --text-heading was undefined; confirm it is no longer referenced."""
+        assert "--text-heading" not in self.css
+
+    def test_demo_bars_have_staggered_delays(self):
+        """Bug #2: demo card bars must have 4 distinct staggered animation-delay values."""
+        delays = self.re.findall(
+            r"lp-demo-bar-row:nth-child\(\d\).*?animation-delay:\s*([\d.]+s)",
+            self.css, self.re.DOTALL
+        )
+        assert len(delays) == 4, f"Expected 4 staggered bar delays, found: {delays}"
+        # All four delays must be different
+        assert len(set(delays)) == 4, f"Bar delays are not all distinct: {delays}"
+
+    def test_progress_fill_transition_under_one_second(self):
+        """Bug #3: progress-fill transition must be < 1s so results don't feel laggy."""
+        m = self.re.search(r"\.progress-fill\s*\{[^}]*transition:[^;]*?([\d.]+)s", self.css)
+        assert m is not None, "Could not find .progress-fill transition duration"
+        duration = float(m.group(1))
+        assert duration < 1.0, f"progress-fill transition is {duration}s — should be < 1s"
