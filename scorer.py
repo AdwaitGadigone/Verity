@@ -14,7 +14,7 @@ THE FORMULA:
 VERDICT TIERS (5 levels):
   90-100 → Highly Credible
   72-89  → Likely Credible
-  45-71  → Uncertain
+  45-71  → Questionable
   25-44  → Likely Misinformation
   0-24   → Misinformation / Disinformation
 """
@@ -95,6 +95,24 @@ def _apply_trusted_source_boost(results: dict, domain: str) -> dict:
             "reason": "Institutional/government source — organizational attribution "
                       "is standard practice. No personal byline is expected or required "
                       "for government publications."
+        }
+
+    # C1 DOMAIN: Government sites are inherently trusted
+    if results["domain"]["score"] < 95:
+        results["domain"] = {
+            **results["domain"],
+            "score": 95,
+            "reason": "Verified institutional/government domain. These portals are "
+                      "subject to strict legal and accuracy standards."
+        }
+
+    # C3 FACTUAL: Government sites act as primary sources
+    if results["factual"]["score"] < 90:
+        results["factual"] = {
+            **results["factual"],
+            "score": 90,
+            "reason": "Primary source publication from a verified government or "
+                      "institutional authority. High factual reliability expected."
         }
 
     # C2 EMOTIONAL: Government/institutional sources are structurally neutral
@@ -248,8 +266,8 @@ def run_all(article_data: dict) -> dict:
         verdict_subtext = verdict_subtext_base or "This content appears mostly reliable. Minor concerns noted."
         verdict_class = "v-good"
     elif final_score >= 45:
-        verdict = "Uncertain"
-        verdict_subtext = verdict_subtext_base or "Proceed with caution. Verify claims through additional sources."
+        verdict = "Questionable"
+        verdict_subtext = verdict_subtext_base or "Mixed credibility. Verify claims through additional sources."
         verdict_class = "v-uncertain"
     elif final_score >= 25:
         verdict = "Likely Misinformation"

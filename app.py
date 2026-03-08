@@ -126,6 +126,27 @@ def analyze():
         if not user_input:
             return jsonify({"error": "No input provided"}), 400
 
+        # ── TEST BYPASS FOR NO-QUOTA DEMO ──────────────────────────────
+        if user_input.strip().upper() == "TEST UNDETERMINABLE":
+            return jsonify({
+                "final_score": 0,
+                "verdict": "Undeterminable",
+                "verdict_subtext": "This content is inherently subjective or belief-based. Credibility cannot be objectively determined.",
+                "verdict_class": "v-undeterminable",
+                "is_undeterminable": True,
+                "mdm_classification": "Unsustainable",
+                "core_claim": "",
+                "neutral_summary": "",
+                "criteria": [
+                    {"key": "domain", "label": "Website Trustworthiness", "score": "N/A", "reason": "Not applicable to subjective content."},
+                    {"key": "emotional", "label": "Sensationalism & Clickbait", "score": "N/A", "reason": "Not applicable to subjective content."},
+                    {"key": "factual", "label": "Fact-Checking & Accuracy", "score": "N/A", "reason": "Not applicable to subjective content."},
+                    {"key": "author", "label": "Author Verifiability", "score": "N/A", "reason": "Not applicable to subjective content."},
+                    {"key": "content", "label": "Content Quality", "score": "N/A", "reason": "Not applicable to subjective content."},
+                    {"key": "mdm", "label": "Threat Classification", "score": "N/A", "reason": "Not applicable to subjective content."}
+                ]
+            })
+
         # ── Step 1: Get the article content ───────────────────────────────
         if mode == "url":
             # User pasted a URL → scrape the article from that website
@@ -163,6 +184,7 @@ def analyze():
             "verdict_class": result.get("verdict_class", "v-uncertain"),
             "final_score": result.get("final_score", 0),
             "mdm_classification": result.get("mdm_classification", ""),
+            "is_undeterminable": result.get("is_undeterminable", False)
         })
 
         # Send the result back to the browser as JSON

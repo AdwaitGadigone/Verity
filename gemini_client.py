@@ -94,13 +94,13 @@ NOTE: War/conflict reporting from established outlets is typically "Valid" or "U
 {sample}
 
 UNDETERMINABLE CONTENT DETECTION:
-Some content is inherently NOT verifiable for factual credibility. You MUST flag these as undeterminable:
-- Religious texts, sermons, theological arguments, spiritual teachings, faith-based claims (e.g. "God exists", "prayer heals")
-- Pure opinion pieces, editorials, or op-eds that are ENTIRELY subjective with no verifiable factual claims
-- Personal essays, philosophical musings, or motivational content that is purely subjective
-- Astrology, horoscopes, paranormal claims, or supernatural content
-- Poetry, fiction, creative writing presented as non-news content
-IMPORTANT: Do NOT flag as undeterminable if the content contains ANY verifiable factual claims, even if it's also opinionated. A political opinion column that cites statistics or makes factual assertions IS verifiable. Only flag content where there is genuinely NO way to assess factual credibility because the content is entirely belief-based or subjective.
+Some content is inherently NOT verifiable for factual credibility. You MUST flag these as undeterminable by setting `is_undeterminable` to true:
+- Pure opinion pieces, editorials, or personal blogs that are ENTIRELY subjective with no verifiable factual claims.
+- Religious texts, sermons, theological arguments, spiritual teachings, faith-based claims (e.g. "God exists", "prayer heals").
+- Personal essays, philosophical musings, or motivational content.
+- Astrology, horoscopes, paranormal claims, or supernatural content.
+- Poetry, fiction, creative writing presented as non-news content.
+IMPORTANT RED ALERT: If the text is just someone giving their strong personal opinion (like "dogs are better than cats"), you MUST set `is_undeterminable` to true. Do not attempt to score opinion pieces as "misinformation" just because you disagree with them or they lack sources. They are UNDETERMINABLE. Only score them normally if they make explicit, objective claims about reality that can be fact-checked.
 
 Return ONLY this JSON structure (no markdown, no extra text):
 {{
@@ -184,6 +184,16 @@ except ImportError:
 # ── Set up Groq fallback client (free tier, llama-3.3-70b) ───────────────────
 # Groq has a generous free quota. Add GROQ_API_KEY to .env to enable.
 _groq_client = None
+try:
+    _groq_key = os.getenv("GROQ_API_KEY", "").strip()
+    if _groq_key:
+        from openai import OpenAI as _OpenAI
+        _groq_client = _OpenAI(api_key=_groq_key, base_url="https://api.groq.com/openai/v1")
+        print("[Groq] Fallback client ready (llama-3.3-70b-versatile).")
+except ImportError:
+    print("[Groq] openai package not installed. Run: pip install openai")
+except Exception as e:
+    print(f"[Groq] Client init failed: {e}")
 try:
     _groq_key = os.getenv("GROQ_API_KEY", "").strip()
     if _groq_key:

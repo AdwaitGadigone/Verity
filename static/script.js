@@ -210,7 +210,7 @@ function renderResults(data) {
   setText("result-verdict-subtext", data.verdict_subtext || "");
 
   // Animate the semicircular gauge after a short delay (lets the section paint first)
-  setTimeout(() => animateGauge(data.final_score || 0, vc), 120);
+  setTimeout(() => animateGauge(data.final_score || 0, vc, data.is_undeterminable), 120);
 
   // ── Core claim ────────────────────────────────────────────────
   const claimSection = el("core-claim-section");
@@ -233,6 +233,8 @@ function renderResults(data) {
       const tier = score >= 72 ? "score-high" : score >= 45 ? "score-mid" : "score-low";
       const icon = CRITERION_ICONS[c.key] || "📊";
 
+      const badgeText = data.is_undeterminable ? "N/A / 100" : (score + "/100");
+
       const row = document.createElement("div");
       row.className = "criterion-row " + tier;
       row.innerHTML =
@@ -242,7 +244,7 @@ function renderResults(data) {
         '<span class="criterion-label">' + esc(c.label) + '</span>' +
         '<span class="criterion-weight">(' + (c.weight || "") + ')</span>' +
         '</div>' +
-        '<span class="criterion-score-badge">' + score + '/100</span>' +
+        '<span class="criterion-score-badge">' + badgeText + '</span>' +
         '</div>' +
         '<div class="progress-track">' +
         '<div class="progress-fill" data-width="' + score + '%" style="width:0%"></div>' +
@@ -288,7 +290,7 @@ function renderResults(data) {
 // ══════════════════════════════════════════════════════════════════
 // SCORE GAUGE — animated semicircular arc
 // ══════════════════════════════════════════════════════════════════
-function animateGauge(score, verdictClass) {
+function animateGauge(score, verdictClass, isUndeterminable = false) {
   const fillEl  = el("gauge-fill");
   const dotEl   = el("gauge-dot");
   const scoreEl = el("result-score");
@@ -313,11 +315,8 @@ function animateGauge(score, verdictClass) {
   fillEl.style.stroke = colour;
   dotEl.style.fill    = colour;
 
-  // Path length of the semicircular arc (π × r = π × 94 ≈ 295.31)
-  const pathLen = fillEl.getTotalLength ? fillEl.getTotalLength() : 295.31;
-  const target  = (score / 100) * pathLen;
-
   // Start fully hidden
+  const pathLen = fillEl.getTotalLength ? fillEl.getTotalLength() : 295.31;
   fillEl.style.strokeDasharray  = `${pathLen} ${pathLen}`;
   fillEl.style.strokeDashoffset = pathLen;
 
@@ -326,6 +325,17 @@ function animateGauge(score, verdictClass) {
   dotEl.setAttribute("cx", startPt.x);
   dotEl.setAttribute("cy", startPt.y);
 
+  if (isUndeterminable) {
+    scoreEl.textContent = "N/A";
+    fillEl.style.display = "none";
+    dotEl.style.display = "none";
+    return; // Skip animation entirely
+  } else {
+    fillEl.style.display = "";
+    dotEl.style.display = "";
+  }
+
+  const target  = (score / 100) * pathLen;
   const DURATION = 1300; // ms
   const startTime = performance.now();
 
@@ -383,7 +393,9 @@ async function readVerdictAloud() {
 
   const speechText =
     "Verity analysis complete. " +
-    "This content scored " + lastResult.final_score + " out of 100 and is rated " +
+    (lastResult.is_undeterminable 
+      ? "This content has a credibility score of Not Applicable and is rated " 
+      : "This content scored " + lastResult.final_score + " out of 100 and is rated ") +
     lastResult.verdict + ". " +
     (lastResult.verdict_subtext || "") + " " +
     "It has been classified as " + lastResult.mdm_classification +
@@ -635,11 +647,13 @@ async function loadHistory() {
         ? item.url.replace(/^https?:\/\//, "").split("/")[0]
         : (item.title || "Pasted text");
 
+      const scoreText = item.is_undeterminable ? "N/A" : (item.final_score + "/100");
+
       row.innerHTML =
         '<div class="history-row-inner">' +
         '<span class="history-domain">' + esc(label.substring(0, 40)) + (label.length > 40 ? "…" : "") + '</span>' +
         '<span class="history-verdict ' + esc(item.verdict_class) + '">' + esc(item.verdict) + '</span>' +
-        '<span class="history-score ' + scoreClass + '">' + item.final_score + '/100</span>' +
+        '<span class="history-score ' + scoreClass + '">' + scoreText + '</span>' +
         '</div>';
 
       // Click re-fills the URL input and analyzes

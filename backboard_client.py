@@ -337,16 +337,21 @@ class BackboardOrchestrator:
         verdict_subtext_base = root.get("verdict_subtext", "") if root else ""
         neutral_summary = root.get("neutral_summary", "") if root else ""
 
-        # Determine verdict tier
-        if final_score >= 90:
+        is_undeterminable = root.get("is_undeterminable", False) if root else False
+        undeterminable_reason = root.get("undeterminable_reason", "") if root else ""
+
+        if is_undeterminable:
+            verdict, verdict_class = "Undeterminable", "v-undeterminable"
+            verdict_subtext = undeterminable_reason or "This content is inherently subjective or belief-based. Credibility cannot be objectively determined."
+        elif final_score >= 90:
             verdict, verdict_class = "Highly Credible", "v-excellent"
             verdict_subtext = verdict_subtext_base or "This content appears to be accurate and well-sourced."
         elif final_score >= 72:
             verdict, verdict_class = "Likely Credible", "v-good"
             verdict_subtext = verdict_subtext_base or "This content appears mostly reliable. Minor concerns noted."
         elif final_score >= 45:
-            verdict, verdict_class = "Uncertain", "v-uncertain"
-            verdict_subtext = verdict_subtext_base or "Proceed with caution. Verify claims through additional sources."
+            verdict, verdict_class = "Questionable", "v-uncertain"
+            verdict_subtext = verdict_subtext_base or "Mixed credibility. Verify claims through additional sources."
         elif final_score >= 25:
             verdict, verdict_class = "Likely Misinformation", "v-suspicious"
             verdict_subtext = verdict_subtext_base or "Significant warning signs detected. Do not share without verification."
@@ -368,6 +373,7 @@ class BackboardOrchestrator:
             "verdict":            verdict,
             "verdict_subtext":    verdict_subtext,
             "verdict_class":      verdict_class,
+            "is_undeterminable":  is_undeterminable,
             "mdm_classification": results["mdm"]["classification"],  # post-boost value
             "core_claim":         fact.get("core_claim", ""),
             "neutral_summary":    neutral_summary,
