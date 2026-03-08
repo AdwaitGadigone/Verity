@@ -247,12 +247,18 @@ def scrape_url(url: str) -> dict:
     try:
         parsed = urlparse(url)
         homepage_url = f"{parsed.scheme}://{parsed.netloc}"
-        headers = {"User-Agent": "Mozilla/5.0 (compatible; VerityBot/1.0)"}
+        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"}
         homepage_response = requests.get(homepage_url, timeout=8, headers=headers)
         result["homepage_html"] = homepage_response.text
     except Exception:
         result["homepage_html"] = ""
 
+    # Truncate to prevent token exhaustion on our LLM APIs
+    if result.get("text"):
+        result["text"] = result["text"][:4000]
+    if result.get("title"):
+        result["title"] = result["title"][:300]
+        
     return result
 
 

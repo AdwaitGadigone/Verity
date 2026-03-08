@@ -370,11 +370,11 @@ if __name__ == "__main__":
     print("=" * 60)
     print("Verity -- Canadian Misinformation Detection Tool")
     print("   Powered by Canadian Centre for Cyber Security (ITSAP.00.300)")
-    print("   Running at: http://localhost:5000")
+    print("   Running at: http://localhost:5001")
     print("=" * 60)
 
     # app.run() starts the web server
     # debug=True → auto-restarts when you save a file (great for development)
     # host="0.0.0.0" → allows access from other devices on the network
     # port=5000 → the server listens on port 5000
-    app.run(debug=True, host="0.0.0.0", port=5000)
+    app.run(debug=True, host="0.0.0.0", port=5001)

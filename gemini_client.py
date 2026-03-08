@@ -211,6 +211,10 @@ def _call_openai_compatible(client, model: str, prompt: str) -> dict | None:
     if not client:
         return None
     try:
+        # Groq/Grok strict requirement: the word "json" MUST be in the prompt if response_format is used
+        if "json" not in prompt.lower():
+            prompt += "\n\nProvide the output in valid JSON format."
+            
         response = client.chat.completions.create(
             model=model,
             messages=[{"role": "user", "content": prompt}],
@@ -252,8 +256,8 @@ def call_gemini(prompt: str, model: str = "gemini-2.0-flash") -> dict | None:
             return None
         except Exception as e:
             error_msg = str(e).lower()
-            if "429" in error_msg or "quota" in error_msg or "exhausted" in error_msg:
-                print(f"[Gemini Quota] API Key #{_current_client_idx + 1} exhausted. Switching...")
+            if "429" in error_msg or "quota" in error_msg or "exhausted" in error_msg or "400" in error_msg or "expired" in error_msg or "invalid" in error_msg:
+                print(f"[Gemini Quota/Error] API Key #{_current_client_idx + 1} exhausted/invalid. Switching...")
                 _current_client_idx = (_current_client_idx + 1) % len(_clients)
                 continue
             else:

@@ -62,7 +62,7 @@ Verity explicitly breaks down the credibility of any article across these 6 area
    ```bash
    python app.py
    ```
-   Open `http://localhost:5000` in your browser.
+   Open `http://localhost:5001` in your browser.
 
 ## 👥 Meet the Team
 Developed for **Hack Canada 2026** by:
