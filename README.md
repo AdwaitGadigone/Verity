@@ -1,5 +1,7 @@
 # Verity &mdash; Canadian Misinformation Detector 🇨🇦
 
+[**🔴 Live Demo: verityca.vercel.app**](https://verityca.vercel.app/)
+
 Verity is an AI-powered credibility analysis tool built for Canadians. It evaluates news articles and identifies misinformation, disinformation, and malinformation (MDM) using the **Canadian Centre for Cyber Security (ITSAP.00.300)** guidelines.
 
 ## 🚀 How It Works
