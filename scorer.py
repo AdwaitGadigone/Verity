@@ -268,7 +268,7 @@ def run_all(article_data: dict) -> dict:
     elif final_score >= 45:
         verdict = "Questionable"
         verdict_subtext = verdict_subtext_base or "Mixed credibility. Verify claims through additional sources."
-        verdict_class = "v-uncertain"
+        verdict_class = "v-questionable"
     elif final_score >= 25:
         verdict = "Likely Misinformation"
         verdict_subtext = verdict_subtext_base or "Significant warning signs detected. Do not share without verification."

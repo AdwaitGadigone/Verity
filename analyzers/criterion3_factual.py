@@ -91,7 +91,7 @@ Claim: "{claim}"
 Rate accuracy from 0 to 100 where:
 - 90-100: Clearly confirmed by multiple reliable sources
 - 70-89: Likely accurate, consistent with reputable reporting
-- 50-69: Uncertain, unverifiable, or conflicting reports
+- 50-69: Questionable, unverifiable, or conflicting reports
 - 30-49: Partially accurate but significantly distorted
 - 0-29: Contradicted by reliable sources or clearly false
 

@@ -187,7 +187,7 @@ function renderResults(data) {
   }
 
   // ── Verdict banner class (controls colour) ───────────────────
-  const vc = data.verdict_class || "v-uncertain";
+  const vc = data.verdict_class || "v-questionable";
   const banner = el("verdict-banner");
   if (banner) banner.className = "verdict-banner " + vc;
 
@@ -235,6 +235,8 @@ function renderResults(data) {
 
       const badgeText = data.is_undeterminable ? "N/A / 100" : (score + "/100");
 
+      const barDisplay = data.is_undeterminable ? 'style="display:none"' : '';
+
       const row = document.createElement("div");
       row.className = "criterion-row " + tier;
       row.innerHTML =
@@ -246,7 +248,7 @@ function renderResults(data) {
         '</div>' +
         '<span class="criterion-score-badge">' + badgeText + '</span>' +
         '</div>' +
-        '<div class="progress-track">' +
+        '<div class="progress-track" ' + barDisplay + '>' +
         '<div class="progress-fill" data-width="' + score + '%" style="width:0%"></div>' +
         '</div>' +
         '<div class="criterion-reason">' + esc(c.reason) + '</div>';
@@ -304,7 +306,7 @@ function animateGauge(score, verdictClass, isUndeterminable = false) {
   const COLOURS = {
     "v-excellent": "#22f088",
     "v-good":      "#22f088",
-    "v-uncertain": "#f0c050",
+    "v-questionable": "#f0c050",
     "v-suspicious":"#ff8b4d",
     "v-bad":       "#ff5a5a",
     "v-undeterminable": "#9ca3af",

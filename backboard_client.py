@@ -350,7 +350,7 @@ class BackboardOrchestrator:
             verdict, verdict_class = "Likely Credible", "v-good"
             verdict_subtext = verdict_subtext_base or "This content appears mostly reliable. Minor concerns noted."
         elif final_score >= 45:
-            verdict, verdict_class = "Questionable", "v-uncertain"
+            verdict, verdict_class = "Questionable", "v-questionable"
             verdict_subtext = verdict_subtext_base or "Mixed credibility. Verify claims through additional sources."
         elif final_score >= 25:
             verdict, verdict_class = "Likely Misinformation", "v-suspicious"

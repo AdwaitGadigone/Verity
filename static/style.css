@@ -89,7 +89,7 @@
   --text-dim:     var(--t4);
   --v-excellent:  #166534;
   --v-good:       #166534;
-  --v-uncertain:  #92400e;
+  --v-questionable:  #92400e;
   --v-suspicious: #9a3412;
   --v-bad:        #991b1b;
   --v-undeterminable: #6b7280;
@@ -594,7 +594,7 @@ a:hover { text-decoration: underline; }
   border-top-color: var(--gold) !important;
 }
 
-.verdict-banner.v-uncertain {
+.verdict-banner.v-questionable {
   background: var(--v-un-tint);
   border-color: var(--v-un-border) !important;
   border-top-color: var(--gold) !important;
@@ -639,7 +639,7 @@ a:hover { text-decoration: underline; }
 
 .verdict-banner.v-excellent .verdict-title,
 .verdict-banner.v-good .verdict-title { color: var(--score-ex); }
-.verdict-banner.v-uncertain .verdict-title { color: var(--score-un); }
+.verdict-banner.v-questionable .verdict-title { color: var(--score-un); }
 .verdict-banner.v-suspicious .verdict-title { color: var(--score-sp); }
 .verdict-banner.v-bad .verdict-title { color: var(--score-bd); }
 .verdict-banner.v-undeterminable .verdict-title { color: var(--score-ud); }
@@ -669,7 +669,7 @@ a:hover { text-decoration: underline; }
 
 .verdict-banner.v-excellent .score-big,
 .verdict-banner.v-good .score-big { color: var(--score-ex); }
-.verdict-banner.v-uncertain .score-big { color: var(--score-un); }
+.verdict-banner.v-questionable .score-big { color: var(--score-un); }
 .verdict-banner.v-suspicious .score-big { color: var(--score-sp); }
 .verdict-banner.v-bad .score-big { color: var(--score-bd); }
 .verdict-banner.v-undeterminable .score-big { color: var(--score-ud); }
@@ -1076,7 +1076,7 @@ a:hover { text-decoration: underline; }
 }
 
 .history-verdict.v-excellent, .history-verdict.v-good  { background: var(--v-ex-tint); color: var(--score-ex); }
-.history-verdict.v-uncertain  { background: var(--v-un-tint); color: var(--score-un); }
+.history-verdict.v-questionable  { background: var(--v-un-tint); color: var(--score-un); }
 .history-verdict.v-suspicious { background: var(--v-sp-tint); color: var(--score-sp); }
 .history-verdict.v-bad        { background: var(--v-bd-tint); color: var(--score-bd); }
 .history-verdict.v-undeterminable { background: var(--v-ud-tint); color: var(--score-ud); }

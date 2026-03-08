@@ -181,7 +181,7 @@ def analyze():
             "url": user_input if mode == "url" else "",
             "title": article_data.get("title", "Pasted text"),
             "verdict": result.get("verdict", ""),
-            "verdict_class": result.get("verdict_class", "v-uncertain"),
+            "verdict_class": result.get("verdict_class", "v-questionable"),
             "final_score": result.get("final_score", 0),
             "mdm_classification": result.get("mdm_classification", ""),
             "is_undeterminable": result.get("is_undeterminable", False)
@@ -301,7 +301,7 @@ def explain():
         verdict_data = data.get("verdict_data", {})
 
         criteria = verdict_data.get("criteria", [])
-        verdict = verdict_data.get("verdict", "Uncertain")
+        verdict = verdict_data.get("verdict", "Questionable")
         final_score = verdict_data.get("final_score", 50)
         mdm = verdict_data.get("mdm_classification", "Unsustainable")
 
