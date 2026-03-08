@@ -16,19 +16,21 @@ if not _api_keys and os.getenv("GEMINI_API_KEY"):
 print(f"Loaded {len(_api_keys)} API keys.")
 
 if _api_keys:
-    client = genai.Client(api_key=_api_keys[0])
-    prompt = """Return {"test": true}"""
-    try:
-        response = client.models.generate_content(
-            model="gemini-2.0-flash",
-            contents=prompt,
-            config=genai_types.GenerateContentConfig(
-                response_mime_type="application/json",
-                temperature=0.1,
-                max_output_tokens=2048,
-            ),
-        )
-        print("SUCCESS:")
-        print(response.text)
-    except Exception as e:
-        print("ERROR:", e)
+    for i, _api_key in enumerate(_api_keys):
+        print(f"\\n--- Testing API Key {i+1} ---")
+        try:
+            client = genai.Client(api_key=_api_key)
+            prompt = """Return {"test": true}"""
+            response = client.models.generate_content(
+                model="gemini-2.0-flash",
+                contents=prompt,
+                config=genai_types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    temperature=0.1,
+                    max_output_tokens=2048,
+                ),
+            )
+            print("SUCCESS:")
+            print(response.text)
+        except Exception as e:
+            print("ERROR:", e)

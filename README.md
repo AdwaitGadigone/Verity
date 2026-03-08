@@ -52,6 +52,7 @@ Verity explicitly breaks down the credibility of any article across these 6 area
    # These are shared among all team members
    GEMINI_API_KEY_1=your_key_here
    GEMINI_API_KEY_2=your_second_key_here
+   GEMINI_API_KEY_3=your_third_key_here
    ELEVENLABS_API_KEY=your_key_here
    BACKBOARD_API_KEY=your_key_here
    GROQ_API_KEY=your_key_here
