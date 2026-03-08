@@ -9,7 +9,8 @@
         content="Verity scores articles across 6 criteria from Canada's official cybersecurity guidelines." />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;0,700;1,300;1,400;1,500;1,600&family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Figtree:wght@300;400;500;600;700;800&display=swap"
+    <link
+        href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;0,700;1,300;1,400;1,500;1,600&family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Figtree:wght@300;400;500;600;700;800&display=swap"
         rel="stylesheet" />
     <link rel="stylesheet" href="/static/style.css" />
 </head>
@@ -31,8 +32,7 @@
             <span class="header-tag">Verity</span>
 
             <div class="header-right">
-                <span class="header-badge">ITSAP.00.300</span>
-                <button class="header-cta-btn" onclick="showAnalyzer()">Analyze &rarr;</button>
+                <span class="header-badge">Canada's Misinformation Detector</span>
             </div>
 
         </div>
@@ -43,7 +43,7 @@
         <!-- ═══════════════════════════════════════════════════
          LANDING PAGE SECTION
         ═══════════════════════════════════════════════════════ -->
-        <section id="landing-section">
+        <section id="landing-section" style="display:none">
 
             <!-- ── Hero ──────────────────────────────────── -->
             <div class="lp-hero">
@@ -105,22 +105,30 @@
                                 <div class="lp-demo-bars">
                                     <div class="lp-demo-bar-row">
                                         <span>Domain</span>
-                                        <div class="lp-demo-track"><div class="lp-demo-fill" style="--w:85%"></div></div>
+                                        <div class="lp-demo-track">
+                                            <div class="lp-demo-fill" style="--w:85%"></div>
+                                        </div>
                                         <span>85</span>
                                     </div>
                                     <div class="lp-demo-bar-row">
                                         <span>Factual</span>
-                                        <div class="lp-demo-track"><div class="lp-demo-fill" style="--w:76%"></div></div>
+                                        <div class="lp-demo-track">
+                                            <div class="lp-demo-fill" style="--w:76%"></div>
+                                        </div>
                                         <span>76</span>
                                     </div>
                                     <div class="lp-demo-bar-row">
                                         <span>Sentiment</span>
-                                        <div class="lp-demo-track"><div class="lp-demo-fill" style="--w:82%"></div></div>
+                                        <div class="lp-demo-track">
+                                            <div class="lp-demo-fill" style="--w:82%"></div>
+                                        </div>
                                         <span>82</span>
                                     </div>
                                     <div class="lp-demo-bar-row">
                                         <span>Author</span>
-                                        <div class="lp-demo-track"><div class="lp-demo-fill" style="--w:71%"></div></div>
+                                        <div class="lp-demo-track">
+                                            <div class="lp-demo-fill" style="--w:71%"></div>
+                                        </div>
                                         <span>71</span>
                                     </div>
                                 </div>
@@ -154,14 +162,16 @@
                             <div class="lp-step-num">02</div>
                             <div class="lp-step-icon">&#129302;</div>
                             <h3>Analyze</h3>
-                            <p>AI evaluates the article against Canada&rsquo;s ITSAP.00.300 framework &mdash; all six criteria in parallel.</p>
+                            <p>AI evaluates the article against Canada&rsquo;s ITSAP.00.300 framework &mdash; all six
+                                criteria in parallel.</p>
                         </div>
                         <div class="lp-step-arrow">&rarr;</div>
                         <div class="lp-step">
                             <div class="lp-step-num">03</div>
                             <div class="lp-step-icon">&#128202;</div>
                             <h3>Verdict</h3>
-                            <p>Get a 0&ndash;100 credibility score, MDM classification, neutral summary, and voice readout.</p>
+                            <p>Get a 0&ndash;100 credibility score, MDM classification, neutral summary, and voice
+                                readout.</p>
                         </div>
                     </div>
                 </div>
@@ -182,7 +192,8 @@
                                 <span class="lp-crit-w">20%</span>
                             </div>
                             <h3>Website Trustworthiness</h3>
-                            <p>Domain reputation, site age, and publisher credibility verified against known reliable sources.</p>
+                            <p>Domain reputation, site age, and publisher credibility verified against known reliable
+                                sources.</p>
                         </div>
                         <div class="lp-crit-card">
                             <div class="lp-crit-top">
@@ -206,7 +217,8 @@
                                 <span class="lp-crit-w">15%</span>
                             </div>
                             <h3>Author Verifiability</h3>
-                            <p>Checks if authors are identifiable, credentialed journalists with verifiable track records.</p>
+                            <p>Checks if authors are identifiable, credentialed journalists with verifiable track
+                                records.</p>
                         </div>
                         <div class="lp-crit-card">
                             <div class="lp-crit-top">
@@ -214,7 +226,8 @@
                                 <span class="lp-crit-w">10%</span>
                             </div>
                             <h3>Content Quality</h3>
-                            <p>Evaluates writing quality, source citations, image integrity, and professional publishing standards.</p>
+                            <p>Evaluates writing quality, source citations, image integrity, and professional publishing
+                                standards.</p>
                         </div>
                         <div class="lp-crit-card">
                             <div class="lp-crit-top">
@@ -222,7 +235,8 @@
                                 <span class="lp-crit-w">10%</span>
                             </div>
                             <h3>Threat Classification</h3>
-                            <p>MDM framework: classifies content as Valid, Misinformation, Disinformation, or Malinformation.</p>
+                            <p>MDM framework: classifies content as Valid, Misinformation, Disinformation, or
+                                Malinformation.</p>
                         </div>
                     </div>
                 </div>
@@ -247,11 +261,11 @@
         <!-- ═══════════════════════════════════════════════════
          INPUT SECTION
         ═══════════════════════════════════════════════════════ -->
-        <section id="input-section" class="input-section" style="display:none">
+        <section id="input-section" class="input-section">
 
             <div class="hero-section">
                 <div class="container">
-                    <div class="hero-eyebrow">AI-Powered Fact Check</div>
+                    <div class="hero-eyebrow">&#11088; AI-Powered Fact Check</div>
                     <h1>Is this news trustworthy?</h1>
                     <p class="hero-subtitle">
                         Submit a URL or article text. Verity scores it across 6 criteria
@@ -300,7 +314,7 @@
                             <span class="trust-badge-icon">&#10003;</span> 6-Criteria Analysis
                         </div>
                         <div class="trust-badge">
-                            <span class="trust-badge-icon">&#10003;</span> Gemini AI
+                            <span class="trust-badge-icon">&#10003;</span> Powered by Gemini AI
                         </div>
                         <div class="trust-badge">
                             <span class="trust-badge-icon">&#10003;</span> Govt. Standards
@@ -388,56 +402,48 @@
                         <svg class="score-gauge" viewBox="0 0 220 136" fill="none" aria-hidden="true">
                             <defs>
                                 <filter id="gauge-glow" x="-40%" y="-40%" width="180%" height="180%">
-                                    <feGaussianBlur stdDeviation="4" result="blur"/>
+                                    <feGaussianBlur stdDeviation="4" result="blur" />
                                     <feMerge>
-                                        <feMergeNode in="blur"/>
-                                        <feMergeNode in="SourceGraphic"/>
+                                        <feMergeNode in="blur" />
+                                        <feMergeNode in="SourceGraphic" />
                                     </feMerge>
                                 </filter>
                                 <filter id="gauge-glow-strong" x="-60%" y="-60%" width="220%" height="220%">
-                                    <feGaussianBlur stdDeviation="6" result="blur"/>
+                                    <feGaussianBlur stdDeviation="6" result="blur" />
                                     <feMerge>
-                                        <feMergeNode in="blur"/>
-                                        <feMergeNode in="SourceGraphic"/>
+                                        <feMergeNode in="blur" />
+                                        <feMergeNode in="SourceGraphic" />
                                     </feMerge>
                                 </filter>
                             </defs>
 
                             <!-- Tick marks at 0%, 25%, 50%, 75%, 100% -->
                             <g class="gauge-ticks" stroke="rgba(0,0,0,0.15)" stroke-width="1.5" stroke-linecap="round">
-                                <line x1="16" y1="126" x2="9"   y2="126"/>
-                                <line x1="43" y1="59"  x2="38"  y2="54"/>
-                                <line x1="110" y1="32" x2="110" y2="25"/>
-                                <line x1="177" y1="59" x2="182" y2="54"/>
-                                <line x1="204" y1="126" x2="211" y2="126"/>
+                                <line x1="16" y1="126" x2="9" y2="126" />
+                                <line x1="43" y1="59" x2="38" y2="54" />
+                                <line x1="110" y1="32" x2="110" y2="25" />
+                                <line x1="177" y1="59" x2="182" y2="54" />
+                                <line x1="204" y1="126" x2="211" y2="126" />
                             </g>
                             <!-- Tick labels -->
-                            <g class="gauge-tick-labels" fill="rgba(0,0,0,0.25)" font-family="Space Mono, monospace" font-size="8" text-anchor="middle">
-                                <text x="13"  y="138">0</text>
+                            <g class="gauge-tick-labels" fill="rgba(0,0,0,0.25)" font-family="Space Mono, monospace"
+                                font-size="8" text-anchor="middle">
+                                <text x="13" y="138">0</text>
                                 <text x="110" y="19">50</text>
                                 <text x="207" y="138">100</text>
                             </g>
 
                             <!-- Background track -->
-                            <path class="gauge-track"
-                                  d="M 16 126 A 94 94 0 0 1 204 126"
-                                  stroke="rgba(0,0,0,0.08)"
-                                  stroke-width="10"
-                                  stroke-linecap="round"
-                                  fill="none"/>
+                            <path class="gauge-track" d="M 16 126 A 94 94 0 0 1 204 126" stroke="rgba(0,0,0,0.08)"
+                                stroke-width="10" stroke-linecap="round" fill="none" />
 
                             <!-- Filled arc (animated by JS) -->
-                            <path class="gauge-fill" id="gauge-fill"
-                                  d="M 16 126 A 94 94 0 0 1 204 126"
-                                  stroke-width="10"
-                                  stroke-linecap="round"
-                                  fill="none"
-                                  filter="url(#gauge-glow)"/>
+                            <path class="gauge-fill" id="gauge-fill" d="M 16 126 A 94 94 0 0 1 204 126"
+                                stroke-width="10" stroke-linecap="round" fill="none" filter="url(#gauge-glow)" />
 
                             <!-- Glowing tip dot -->
-                            <circle class="gauge-dot" id="gauge-dot"
-                                    cx="16" cy="126" r="6"
-                                    filter="url(#gauge-glow-strong)"/>
+                            <circle class="gauge-dot" id="gauge-dot" cx="16" cy="126" r="6"
+                                filter="url(#gauge-glow-strong)" />
                         </svg>
 
                         <!-- Score number — overlaid in the arc's visual center -->
@@ -455,7 +461,9 @@
                     <span class="undeterminable-icon">⚠</span>
                     <div class="undeterminable-text">
                         <strong>Credibility Cannot Be Determined</strong>
-                        <p>This content is inherently subjective, opinion-based, or belief-based. There is no objective way to verify its credibility because it does not contain empirically verifiable factual claims. The score above reflects structural quality only, not factual accuracy.</p>
+                        <p>This content is inherently subjective, opinion-based, or belief-based. There is no objective
+                            way to verify its credibility because it does not contain empirically verifiable factual
+                            claims. The score above reflects structural quality only, not factual accuracy.</p>
                     </div>
                 </div>
 
@@ -469,9 +477,12 @@
                         <span class="neutral-summary-icon">&#128220;</span>
                         <span class="neutral-summary-title">Neutral Summary</span>
                         <div class="neutral-summary-controls">
-                            <button class="summary-speak-btn" id="summary-speak-btn" onclick="readSummaryAloud()">Read</button>
-                            <button class="summary-stop-btn" id="summary-stop-btn" onclick="stopSummaryAudio()" style="display:none">Stop</button>
-                            <button class="neutral-summary-toggle" onclick="toggleSummary()" id="summary-toggle-btn">Hide</button>
+                            <button class="summary-speak-btn" id="summary-speak-btn"
+                                onclick="readSummaryAloud()">Read</button>
+                            <button class="summary-stop-btn" id="summary-stop-btn" onclick="stopSummaryAudio()"
+                                style="display:none">Stop</button>
+                            <button class="neutral-summary-toggle" onclick="toggleSummary()"
+                                id="summary-toggle-btn">Hide</button>
                         </div>
                     </div>
                     <div id="neutral-summary-body" class="neutral-summary-body"></div>
@@ -528,7 +539,7 @@
             &mdash; Always verify with multiple sources.
         </p>
         <p>Built at Hack Canada 2026 &middot; Google Gemini, ElevenLabs &amp; Backboard.io</p>
-        <p class="footer-team">Adwait Gadigone &middot; Hasan Naqvi &middot; Haroldina Koolaid</p>
+        <p class="footer-team">Adwait Gadigone &middot; Hasan Naqvi &middot; Hari Kolla</p>
     </footer>
 
     <script src="/static/script.js"></script>
