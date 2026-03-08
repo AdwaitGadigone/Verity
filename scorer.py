@@ -221,8 +221,25 @@ def run_all(article_data: dict) -> dict:
     verdict_subtext_base = mega.get("verdict_subtext") if mega else None
     neutral_summary = mega.get("neutral_summary", "") if mega else ""
 
+    # ── Check for undeterminable content (religious, purely subjective, etc.) ──
+    # If the AI flagged this content as having NO verifiable factual claims,
+    # override the verdict to "Undeterminable" — the credibility score is
+    # meaningless for content that is entirely belief-based or opinion-only.
+    is_undeterminable = mega.get("is_undeterminable", False) if mega else False
+    undeterminable_reason = mega.get("undeterminable_reason", "") if mega else ""
+
+    if is_undeterminable:
+        verdict = "Undeterminable"
+        verdict_subtext = (
+            undeterminable_reason
+            or "This content is inherently subjective or belief-based. "
+               "Credibility cannot be objectively determined."
+        )
+        verdict_class = "v-undeterminable"
+        # Keep the final_score as-is for transparency, but the verdict
+        # clearly communicates that the score is not meaningful here.
     # Determine the verdict (5-tier system) based on final_score
-    if final_score >= 90:
+    elif final_score >= 90:
         verdict = "Highly Credible"
         verdict_subtext = verdict_subtext_base or "This content appears to be accurate and well-sourced."
         verdict_class = "v-excellent"
@@ -298,6 +315,7 @@ def run_all(article_data: dict) -> dict:
         "verdict":           verdict,
         "verdict_subtext":   verdict_subtext,
         "verdict_class":     verdict_class,
+        "is_undeterminable": is_undeterminable,
         "mdm_classification": mdm_classification,
         "core_claim":        core_claim,
         "neutral_summary":   neutral_summary,

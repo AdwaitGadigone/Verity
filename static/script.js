@@ -70,10 +70,35 @@ function switchTab(mode) {
 // SECTION VISIBILITY
 // ══════════════════════════════════════════════════════════════════
 function showSection(id) {
-  ["input-section", "loading-section", "results-section"].forEach(s => {
+  const displayType = { "loading-section": "flex" };
+  ["landing-section", "input-section", "loading-section", "results-section"].forEach(s => {
     const section = el(s);
-    if (section) section.style.display = (s === id) ? "block" : "none";
+    if (section) section.style.display = (s === id) ? (displayType[s] || "block") : "none";
   });
+}
+
+// Show the analyzer tool (from landing page CTA or header button)
+function showAnalyzer() {
+  showSection("input-section");
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+// Go back to the landing page (logo click)
+function goToLanding() {
+  if (currentAudio) { currentAudio.pause(); currentAudio = null; }
+  if (summaryAudio) { summaryAudio.pause(); summaryAudio = null; }
+  lastResult = null;
+  isPlayingExplain = false;
+  showSection("landing-section");
+  window.scrollTo({ top: 0, behavior: "smooth" });
+  // Trigger demo bar animations again
+  setTimeout(() => {
+    document.querySelectorAll(".lp-demo-fill").forEach(bar => {
+      bar.style.animation = "none";
+      bar.offsetHeight; // reflow
+      bar.style.animation = "";
+    });
+  }, 100);
 }
 
 
@@ -166,11 +191,26 @@ function renderResults(data) {
   const banner = el("verdict-banner");
   if (banner) banner.className = "verdict-banner " + vc;
 
+  // ── Undeterminable notice ─────────────────────────────────────
+  const undeterminableNotice = el("undeterminable-notice");
+  if (undeterminableNotice) {
+    if (data.is_undeterminable) {
+      undeterminableNotice.style.display = "block";
+    } else {
+      undeterminableNotice.style.display = "none";
+    }
+  }
+
   // ── Verdict fields ────────────────────────────────────────────
   setText("result-verdict-title", data.verdict || "");
-  setText("result-score", data.final_score || "?");
+  // Score is animated by the gauge — initialise to 0, animateGauge counts it up
+  const scoreEl = el("result-score");
+  if (scoreEl) scoreEl.textContent = "0";
   setText("result-mdm-badge", "Classified as: " + (data.mdm_classification || "Unknown"));
   setText("result-verdict-subtext", data.verdict_subtext || "");
+
+  // Animate the semicircular gauge after a short delay (lets the section paint first)
+  setTimeout(() => animateGauge(data.final_score || 0, vc), 120);
 
   // ── Core claim ────────────────────────────────────────────────
   const claimSection = el("core-claim-section");
@@ -246,6 +286,85 @@ function renderResults(data) {
 
 
 // ══════════════════════════════════════════════════════════════════
+// SCORE GAUGE — animated semicircular arc
+// ══════════════════════════════════════════════════════════════════
+function animateGauge(score, verdictClass) {
+  const fillEl  = el("gauge-fill");
+  const dotEl   = el("gauge-dot");
+  const scoreEl = el("result-score");
+  if (!fillEl || !dotEl || !scoreEl) return;
+
+  // Remove any previous landed state
+  fillEl.classList.remove("landed");
+  dotEl.classList.remove("landed");
+
+  // Colour per verdict tier
+  const COLOURS = {
+    "v-excellent": "#22f088",
+    "v-good":      "#22f088",
+    "v-uncertain": "#f0c050",
+    "v-suspicious":"#ff8b4d",
+    "v-bad":       "#ff5a5a",
+    "v-undeterminable": "#9ca3af",
+  };
+  const colour = COLOURS[verdictClass] || "#22f088";
+
+  // Apply colour to arc and dot
+  fillEl.style.stroke = colour;
+  dotEl.style.fill    = colour;
+
+  // Path length of the semicircular arc (π × r = π × 94 ≈ 295.31)
+  const pathLen = fillEl.getTotalLength ? fillEl.getTotalLength() : 295.31;
+  const target  = (score / 100) * pathLen;
+
+  // Start fully hidden
+  fillEl.style.strokeDasharray  = `${pathLen} ${pathLen}`;
+  fillEl.style.strokeDashoffset = pathLen;
+
+  // Position dot at the arc's start point
+  const startPt = fillEl.getPointAtLength ? fillEl.getPointAtLength(0) : { x: 16, y: 126 };
+  dotEl.setAttribute("cx", startPt.x);
+  dotEl.setAttribute("cy", startPt.y);
+
+  const DURATION = 1300; // ms
+  const startTime = performance.now();
+
+  function easeOutCubic(t) { return 1 - Math.pow(1 - t, 3); }
+
+  function tick(now) {
+    const elapsed  = now - startTime;
+    const progress = Math.min(elapsed / DURATION, 1);
+    const eased    = easeOutCubic(progress);
+
+    // Animate arc fill
+    fillEl.style.strokeDashoffset = pathLen - eased * target;
+
+    // Move glowing dot along the arc
+    const traveled = eased * target;
+    if (fillEl.getPointAtLength && traveled > 0) {
+      const pt = fillEl.getPointAtLength(traveled);
+      dotEl.setAttribute("cx", pt.x);
+      dotEl.setAttribute("cy", pt.y);
+    }
+
+    // Count up the score number
+    scoreEl.textContent = Math.round(eased * score);
+
+    if (progress < 1) {
+      requestAnimationFrame(tick);
+    } else {
+      // Final state — snap to exact value and trigger idle animations
+      scoreEl.textContent = score;
+      fillEl.classList.add("landed");
+      dotEl.classList.add("landed");
+    }
+  }
+
+  requestAnimationFrame(tick);
+}
+
+
+// ══════════════════════════════════════════════════════════════════
 // ELEVENLABS VOICE — Play
 // ══════════════════════════════════════════════════════════════════
 async function readVerdictAloud() {
@@ -315,8 +434,13 @@ async function readVerdictAloud() {
 // ══════════════════════════════════════════════════════════════════
 function stopAudio() {
   if (currentAudio) {
+    currentAudio.onended = null;  // prevent double-cleanup via dispatch
     currentAudio.pause();
-    currentAudio.dispatchEvent(new Event("ended"));
+    currentAudio = null;
+    const stopBtn = el("stop-btn");
+    const speakBtn = el("speak-btn");
+    if (stopBtn) stopBtn.style.display = "none";
+    if (speakBtn) { speakBtn.textContent = "\uD83D\uDD0A Read Verdict Aloud"; speakBtn.disabled = false; }
   }
 }
 
@@ -369,8 +493,13 @@ async function readSummaryAloud() {
 
 function stopSummaryAudio() {
   if (summaryAudio) {
+    summaryAudio.onended = null;  // prevent double-cleanup
     summaryAudio.pause();
-    summaryAudio.dispatchEvent(new Event("ended"));
+    summaryAudio = null;
+    const stopBtn = el("summary-stop-btn");
+    const speakBtn = el("summary-speak-btn");
+    if (stopBtn) stopBtn.style.display = "none";
+    if (speakBtn) { speakBtn.textContent = "\uD83D\uDD0A Read"; speakBtn.disabled = false; }
   }
 }
 
@@ -379,8 +508,8 @@ function stopSummaryAudio() {
 // RESET — called by logo click or "Analyze Another Article"
 // ══════════════════════════════════════════════════════════════════
 function resetToInput() {
-  if (currentAudio) { currentAudio.pause(); currentAudio = null; }
-  if (summaryAudio) { summaryAudio.pause(); summaryAudio = null; }
+  if (currentAudio) { currentAudio.onended = null; currentAudio.pause(); currentAudio = null; }
+  if (summaryAudio) { summaryAudio.onended = null; summaryAudio.pause(); summaryAudio = null; }
   lastResult = null;
   isPlayingExplain = false;
   const ui = el("url-input"); if (ui) ui.value = "";
@@ -388,6 +517,9 @@ function resetToInput() {
   const followup = el("followup-buttons");
   if (followup) followup.style.display = "none";
   document.querySelectorAll(".error-banner").forEach(b => b.remove());
+  // Clear loading checklist done-state for the next analysis
+  ["lc-domain","lc-emotional","lc-factual","lc-author","lc-content","lc-mdm"]
+    .forEach(id => { const e = el(id); if (e) e.classList.remove("done"); });
   showSection("input-section");
 }
 
@@ -554,13 +686,21 @@ function showFollowUpButtons() {
 }
 
 
-// Enter key on URL field → analyze
+// Enter key on URL and text fields → analyze
 document.addEventListener("DOMContentLoaded", () => {
   const urlInput = el("url-input");
   if (urlInput) urlInput.addEventListener("keydown", e => {
     if (e.key === "Enter") runAnalysis();
   });
 
-  // Load history on page load
+  const textInput = el("text-input");
+  if (textInput) textInput.addEventListener("keydown", e => {
+    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) runAnalysis();
+  });
+
+  // Show landing page on initial load
+  showSection("landing-section");
+
+  // Load history (rendered when analyzer is shown)
   loadHistory();
 });

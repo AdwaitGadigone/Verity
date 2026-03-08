@@ -4,12 +4,12 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Verity &mdash; Canadian Misinformation Detector</title>
+    <title>Verity &mdash; Canada's Misinformation Detector</title>
     <meta name="description"
         content="Verity scores articles across 6 criteria from Canada's official cybersecurity guidelines." />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;0,700;1,300;1,400;1,500;1,600&family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Figtree:wght@300;400;500;600;700;800&display=swap"
         rel="stylesheet" />
     <link rel="stylesheet" href="/static/style.css" />
 </head>
@@ -17,13 +17,12 @@
 <body>
 
     <!-- ═══════════════════════════════════════════════════════
-       SITE HEADER — solid green, gold bottom line
-       Clicking "Verity" resets to input screen via resetToInput()
+       SITE HEADER
   ═══════════════════════════════════════════════════════════ -->
     <header class="site-header">
         <div class="header-inner">
 
-            <div class="logo" onclick="resetToInput()" role="button" tabindex="0" title="Return to home"
+            <div class="logo" onclick="goToLanding()" role="button" tabindex="0" title="Return to home"
                 aria-label="Verity home">
                 <img src="/static/key_logo.png" alt="Verity Logo" class="logo-img" />
             </div>
@@ -32,7 +31,8 @@
             <span class="header-tag">Verity</span>
 
             <div class="header-right">
-                <span class="header-badge">Canada's Misinformation Detector</span>
+                <span class="header-badge">ITSAP.00.300</span>
+                <button class="header-cta-btn" onclick="showAnalyzer()">Analyze &rarr;</button>
             </div>
 
         </div>
@@ -41,36 +41,235 @@
     <main>
 
         <!-- ═══════════════════════════════════════════════════
-         INPUT SECTION
-    ═══════════════════════════════════════════════════════ -->
-        <section id="input-section" class="input-section">
+         LANDING PAGE SECTION
+        ═══════════════════════════════════════════════════════ -->
+        <section id="landing-section">
 
-            <!-- Hero — solid green, enough bottom padding -->
-            <div class="hero-section">
-                <div class="container">
-                    <div class="hero-eyebrow">&#11088; AI-Powered Fact Check</div>
-                    <!-- "news" is plain white (no gold highlighting) -->
-                    <h1>Is this news trustworthy?</h1>
-                    <p class="hero-subtitle">
-                        Paste a URL or article text. Verity scores it across
-                        6 criteria from Canada's official cybersecurity guidelines
-                        and tells you exactly why.
+            <!-- ── Hero ──────────────────────────────────── -->
+            <div class="lp-hero">
+                <div class="lp-container">
+                    <div class="lp-hero-inner">
+
+                        <div class="lp-hero-text">
+                            <div class="lp-eyebrow">
+                                <span class="lp-eyebrow-dot"></span>
+                                Canada &mdash; ITSAP.00.300 Framework
+                            </div>
+                            <h1 class="lp-hero-h1">
+                                Know what's<br>
+                                <em class="lp-hero-em">true.</em>
+                            </h1>
+                            <p class="lp-hero-p">
+                                Verity runs any news article through <strong>6 independent checks</strong>
+                                drawn from Canada&rsquo;s official cybersecurity guidelines &mdash;
+                                and tells you exactly what to trust.
+                            </p>
+                            <div class="lp-cta-row">
+                                <button class="lp-btn-primary" onclick="showAnalyzer()">
+                                    Analyze an Article
+                                </button>
+                                <a class="lp-btn-ghost" href="#lp-how">See how &darr;</a>
+                            </div>
+                            <div class="lp-stats-row">
+                                <div class="lp-stat">
+                                    <span class="lp-stat-n">6</span>
+                                    <span class="lp-stat-l">Criteria</span>
+                                </div>
+                                <div class="lp-stat-div"></div>
+                                <div class="lp-stat">
+                                    <span class="lp-stat-n">AI</span>
+                                    <span class="lp-stat-l">Powered</span>
+                                </div>
+                                <div class="lp-stat-div"></div>
+                                <div class="lp-stat">
+                                    <span class="lp-stat-n">0&ndash;100</span>
+                                    <span class="lp-stat-l">Score</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Animated demo card -->
+                        <div class="lp-hero-card">
+                            <div class="lp-demo-card">
+                                <div class="lp-demo-header">
+                                    <span class="lp-demo-label">VERITY / ANALYSIS</span>
+                                    <span class="lp-demo-live">&#9679; LIVE</span>
+                                </div>
+                                <div class="lp-demo-score-row">
+                                    <span class="lp-demo-num">78</span>
+                                    <div class="lp-demo-meta">
+                                        <div class="lp-demo-verdict">Likely Credible</div>
+                                        <div class="lp-demo-src">theglobeandmail.com</div>
+                                    </div>
+                                </div>
+                                <div class="lp-demo-bars">
+                                    <div class="lp-demo-bar-row">
+                                        <span>Domain</span>
+                                        <div class="lp-demo-track"><div class="lp-demo-fill" style="--w:85%"></div></div>
+                                        <span>85</span>
+                                    </div>
+                                    <div class="lp-demo-bar-row">
+                                        <span>Factual</span>
+                                        <div class="lp-demo-track"><div class="lp-demo-fill" style="--w:76%"></div></div>
+                                        <span>76</span>
+                                    </div>
+                                    <div class="lp-demo-bar-row">
+                                        <span>Sentiment</span>
+                                        <div class="lp-demo-track"><div class="lp-demo-fill" style="--w:82%"></div></div>
+                                        <span>82</span>
+                                    </div>
+                                    <div class="lp-demo-bar-row">
+                                        <span>Author</span>
+                                        <div class="lp-demo-track"><div class="lp-demo-fill" style="--w:71%"></div></div>
+                                        <span>71</span>
+                                    </div>
+                                </div>
+                                <div class="lp-demo-footer">
+                                    Classification: <strong>Valid</strong> &bull; ITSAP.00.300
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+
+            <!-- ── How It Works ───────────────────────── -->
+            <div id="lp-how" class="lp-section lp-how-section">
+                <div class="lp-container">
+                    <div class="lp-section-hdr">
+                        <p class="lp-section-label">Process</p>
+                        <h2>How It Works</h2>
+                        <p>Three steps to smarter news consumption</p>
+                    </div>
+                    <div class="lp-steps">
+                        <div class="lp-step">
+                            <div class="lp-step-num">01</div>
+                            <div class="lp-step-icon">&#128206;</div>
+                            <h3>Submit</h3>
+                            <p>Paste a URL or copy-paste the full article text directly into Verity.</p>
+                        </div>
+                        <div class="lp-step-arrow">&rarr;</div>
+                        <div class="lp-step">
+                            <div class="lp-step-num">02</div>
+                            <div class="lp-step-icon">&#129302;</div>
+                            <h3>Analyze</h3>
+                            <p>AI evaluates the article against Canada&rsquo;s ITSAP.00.300 framework &mdash; all six criteria in parallel.</p>
+                        </div>
+                        <div class="lp-step-arrow">&rarr;</div>
+                        <div class="lp-step">
+                            <div class="lp-step-num">03</div>
+                            <div class="lp-step-icon">&#128202;</div>
+                            <h3>Verdict</h3>
+                            <p>Get a 0&ndash;100 credibility score, MDM classification, neutral summary, and voice readout.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ── 6 Criteria ──────────────────────────── -->
+            <div class="lp-section lp-crit-section">
+                <div class="lp-container">
+                    <div class="lp-section-hdr">
+                        <p class="lp-section-label">Framework</p>
+                        <h2>6 Criteria. One Score.</h2>
+                        <p>Based on the Canadian Centre for Cyber Security ITSAP.00.300 framework</p>
+                    </div>
+                    <div class="lp-crit-grid">
+                        <div class="lp-crit-card">
+                            <div class="lp-crit-top">
+                                <span class="lp-crit-num">C1</span>
+                                <span class="lp-crit-w">20%</span>
+                            </div>
+                            <h3>Website Trustworthiness</h3>
+                            <p>Domain reputation, site age, and publisher credibility verified against known reliable sources.</p>
+                        </div>
+                        <div class="lp-crit-card">
+                            <div class="lp-crit-top">
+                                <span class="lp-crit-num">C2</span>
+                                <span class="lp-crit-w">20%</span>
+                            </div>
+                            <h3>Sensationalism &amp; Clickbait</h3>
+                            <p>Detects emotionally manipulative language, fear tactics, and misleading headlines.</p>
+                        </div>
+                        <div class="lp-crit-card">
+                            <div class="lp-crit-top">
+                                <span class="lp-crit-num">C3</span>
+                                <span class="lp-crit-w">25%</span>
+                            </div>
+                            <h3>Fact-Checking &amp; Accuracy</h3>
+                            <p>AI cross-references key claims against established facts and verifiable sources.</p>
+                        </div>
+                        <div class="lp-crit-card">
+                            <div class="lp-crit-top">
+                                <span class="lp-crit-num">C4</span>
+                                <span class="lp-crit-w">15%</span>
+                            </div>
+                            <h3>Author Verifiability</h3>
+                            <p>Checks if authors are identifiable, credentialed journalists with verifiable track records.</p>
+                        </div>
+                        <div class="lp-crit-card">
+                            <div class="lp-crit-top">
+                                <span class="lp-crit-num">C5</span>
+                                <span class="lp-crit-w">10%</span>
+                            </div>
+                            <h3>Content Quality</h3>
+                            <p>Evaluates writing quality, source citations, image integrity, and professional publishing standards.</p>
+                        </div>
+                        <div class="lp-crit-card">
+                            <div class="lp-crit-top">
+                                <span class="lp-crit-num">C6</span>
+                                <span class="lp-crit-w">10%</span>
+                            </div>
+                            <h3>Threat Classification</h3>
+                            <p>MDM framework: classifies content as Valid, Misinformation, Disinformation, or Malinformation.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ── Bottom CTA ──────────────────────────── -->
+            <div class="lp-section lp-bottom-cta">
+                <div class="lp-container">
+                    <h2 class="lp-cta-h2">Ready to verify?</h2>
+                    <p class="lp-cta-sub">Paste any news URL and get a credibility score in seconds &mdash; free.</p>
+                    <button class="lp-btn-primary lp-btn-lg" onclick="showAnalyzer()">
+                        Start Analyzing &nbsp;&rarr;
+                    </button>
+                    <p class="lp-cta-note">
+                        Powered by Google Gemini &middot; ElevenLabs &middot; Groq &middot; Backboard.io
                     </p>
                 </div>
             </div>
 
-            <!-- Input card — floats over the hero -->
+        </section>
+
+        <!-- ═══════════════════════════════════════════════════
+         INPUT SECTION
+        ═══════════════════════════════════════════════════════ -->
+        <section id="input-section" class="input-section" style="display:none">
+
+            <div class="hero-section">
+                <div class="container">
+                    <div class="hero-eyebrow">AI-Powered Fact Check</div>
+                    <h1>Is this news trustworthy?</h1>
+                    <p class="hero-subtitle">
+                        Submit a URL or article text. Verity scores it across 6 criteria
+                        from Canada&rsquo;s official cybersecurity guidelines.
+                    </p>
+                </div>
+            </div>
+
             <div class="container">
                 <div class="input-card">
 
-                    <!-- URL / Text tabs -->
                     <div class="tab-bar" role="tablist">
                         <button id="tab-url" class="tab active" role="tab" aria-selected="true"
                             onclick="switchTab('url')">
-                            &#128279;&nbsp; Paste URL
+                            Paste URL
                         </button>
                         <button id="tab-text" class="tab" role="tab" aria-selected="false" onclick="switchTab('text')">
-                            &#128196;&nbsp; Paste Text
+                            Paste Text
                         </button>
                     </div>
 
@@ -89,7 +288,7 @@
                     </button>
 
                     <p class="powered-by">
-                        Powered by
+                        Scored against
                         <a href="https://www.cyber.gc.ca/en/guidance/how-identify-misinformation-disinformation-and-malinformation-itsap00300"
                             target="_blank" rel="noopener">
                             Canadian Centre for Cyber Security (ITSAP.00.300)
@@ -101,7 +300,7 @@
                             <span class="trust-badge-icon">&#10003;</span> 6-Criteria Analysis
                         </div>
                         <div class="trust-badge">
-                            <span class="trust-badge-icon">&#10003;</span> Powered by Gemini AI
+                            <span class="trust-badge-icon">&#10003;</span> Gemini AI
                         </div>
                         <div class="trust-badge">
                             <span class="trust-badge-icon">&#10003;</span> Govt. Standards
@@ -111,11 +310,10 @@
                 </div>
             </div>
 
-            <!-- Recent Analyses History -->
             <div class="container" id="history-container" style="display:none">
                 <div class="history-card">
                     <div class="history-header">
-                        <span class="history-title">&#128337; Recent Analyses</span>
+                        <span class="history-title">Recent Analyses</span>
                         <span class="history-subtitle">Click to re-analyze</span>
                     </div>
                     <div id="history-list" class="history-list"></div>
@@ -126,72 +324,159 @@
 
         <!-- ═══════════════════════════════════════════════════
          LOADING SECTION
-    ═══════════════════════════════════════════════════════ -->
+        ═══════════════════════════════════════════════════════ -->
         <section id="loading-section" class="loading-section" style="display:none" aria-live="polite">
-            <div class="container">
-                <div class="loader-ring"></div>
+            <div class="loading-inner">
+
+                <div class="loading-rings">
+                    <div class="lr-outer"></div>
+                    <div class="lr-middle"></div>
+                    <div class="lr-core">&#9650;</div>
+                </div>
+
                 <h2 class="loading-title">Analyzing&hellip;</h2>
-                <p class="loading-subtitle">Running 6 independent checks + AI scoring</p>
-                <ul id="loading-checklist" class="loading-checklist">
-                    <li id="lc-domain" class="lc-item">&#128193; Checking domain &amp; publisher credibility</li>
-                    <li id="lc-emotional" class="lc-item">&#128172; Analyzing emotional language &amp; clickbait</li>
-                    <li id="lc-factual" class="lc-item">&#128269; Verifying facts with Gemini AI</li>
-                    <li id="lc-author" class="lc-item">&#9997; Checking author &amp; source transparency</li>
-                    <li id="lc-content" class="lc-item">&#128196; Assessing content integrity</li>
-                    <li id="lc-mdm" class="lc-item">&#127464;&#127462; Classifying under MDM framework</li>
-                </ul>
+                <p class="loading-subtitle">Running 6 independent checks</p>
+
+                <div class="loading-checks" id="loading-checklist">
+                    <div id="lc-domain" class="lc-item">
+                        <span class="lc-icon">&#128193;</span>
+                        <span class="lc-label">Domain</span>
+                    </div>
+                    <div id="lc-emotional" class="lc-item">
+                        <span class="lc-icon">&#128172;</span>
+                        <span class="lc-label">Sentiment</span>
+                    </div>
+                    <div id="lc-factual" class="lc-item">
+                        <span class="lc-icon">&#128269;</span>
+                        <span class="lc-label">Factual</span>
+                    </div>
+                    <div id="lc-author" class="lc-item">
+                        <span class="lc-icon">&#9997;</span>
+                        <span class="lc-label">Author</span>
+                    </div>
+                    <div id="lc-content" class="lc-item">
+                        <span class="lc-icon">&#128196;</span>
+                        <span class="lc-label">Content</span>
+                    </div>
+                    <div id="lc-mdm" class="lc-item">
+                        <span class="lc-icon">&#128737;</span>
+                        <span class="lc-label">Threat</span>
+                    </div>
+                </div>
+
             </div>
         </section>
 
         <!-- ═══════════════════════════════════════════════════
          RESULTS SECTION
-         IMPORTANT: all id="" values here must match exactly
-         what renderResults() in script.js looks for.
-    ═══════════════════════════════════════════════════════ -->
+        ═══════════════════════════════════════════════════════ -->
         <section id="results-section" class="results-section" style="display:none">
             <div class="container">
 
-                <!-- Article title (rendered by JS) -->
                 <p id="result-article-title" class="article-title-display" style="display:none"></p>
 
-                <!-- Cache badge (shown when result is from memory) -->
                 <div id="cache-badge" class="cache-badge" style="display:none">
-                    &#9889; From Memory &mdash; instant result
+                    &#9889; Instant &mdash; from memory
                 </div>
 
-                <!-- Verdict banner -->
                 <div id="verdict-banner" class="verdict-banner v-uncertain">
                     <div class="verdict-eyebrow">Credibility Assessment</div>
                     <div class="verdict-title" id="result-verdict-title"></div>
-                    <div class="verdict-score-row">
-                        <span class="score-big" id="result-score"></span>
-                        <span class="score-label">/ 100</span>
+
+                    <!-- Semi-circle gauge -->
+                    <div class="score-gauge-wrap">
+                        <svg class="score-gauge" viewBox="0 0 220 136" fill="none" aria-hidden="true">
+                            <defs>
+                                <filter id="gauge-glow" x="-40%" y="-40%" width="180%" height="180%">
+                                    <feGaussianBlur stdDeviation="4" result="blur"/>
+                                    <feMerge>
+                                        <feMergeNode in="blur"/>
+                                        <feMergeNode in="SourceGraphic"/>
+                                    </feMerge>
+                                </filter>
+                                <filter id="gauge-glow-strong" x="-60%" y="-60%" width="220%" height="220%">
+                                    <feGaussianBlur stdDeviation="6" result="blur"/>
+                                    <feMerge>
+                                        <feMergeNode in="blur"/>
+                                        <feMergeNode in="SourceGraphic"/>
+                                    </feMerge>
+                                </filter>
+                            </defs>
+
+                            <!-- Tick marks at 0%, 25%, 50%, 75%, 100% -->
+                            <g class="gauge-ticks" stroke="rgba(0,0,0,0.15)" stroke-width="1.5" stroke-linecap="round">
+                                <line x1="16" y1="126" x2="9"   y2="126"/>
+                                <line x1="43" y1="59"  x2="38"  y2="54"/>
+                                <line x1="110" y1="32" x2="110" y2="25"/>
+                                <line x1="177" y1="59" x2="182" y2="54"/>
+                                <line x1="204" y1="126" x2="211" y2="126"/>
+                            </g>
+                            <!-- Tick labels -->
+                            <g class="gauge-tick-labels" fill="rgba(0,0,0,0.25)" font-family="Space Mono, monospace" font-size="8" text-anchor="middle">
+                                <text x="13"  y="138">0</text>
+                                <text x="110" y="19">50</text>
+                                <text x="207" y="138">100</text>
+                            </g>
+
+                            <!-- Background track -->
+                            <path class="gauge-track"
+                                  d="M 16 126 A 94 94 0 0 1 204 126"
+                                  stroke="rgba(0,0,0,0.08)"
+                                  stroke-width="10"
+                                  stroke-linecap="round"
+                                  fill="none"/>
+
+                            <!-- Filled arc (animated by JS) -->
+                            <path class="gauge-fill" id="gauge-fill"
+                                  d="M 16 126 A 94 94 0 0 1 204 126"
+                                  stroke-width="10"
+                                  stroke-linecap="round"
+                                  fill="none"
+                                  filter="url(#gauge-glow)"/>
+
+                            <!-- Glowing tip dot -->
+                            <circle class="gauge-dot" id="gauge-dot"
+                                    cx="16" cy="126" r="6"
+                                    filter="url(#gauge-glow-strong)"/>
+                        </svg>
+
+                        <!-- Score number — overlaid in the arc's visual center -->
+                        <div class="gauge-center">
+                            <span class="score-big" id="result-score">0</span>
+                            <span class="score-label">/ 100</span>
+                        </div>
                     </div>
+
                     <div id="result-mdm-badge" class="mdm-badge"></div>
                     <p id="result-verdict-subtext" class="verdict-subtext"></p>
                 </div>
 
-                <!-- Core claim (hidden if not present) -->
+                <div id="undeterminable-notice" class="undeterminable-notice" style="display:none">
+                    <span class="undeterminable-icon">⚠</span>
+                    <div class="undeterminable-text">
+                        <strong>Credibility Cannot Be Determined</strong>
+                        <p>This content is inherently subjective, opinion-based, or belief-based. There is no objective way to verify its credibility because it does not contain empirically verifiable factual claims. The score above reflects structural quality only, not factual accuracy.</p>
+                    </div>
+                </div>
+
                 <div id="core-claim-section" class="core-claim-section" style="display:none">
-                    <p class="core-claim-label">&#128270; Primary claim identified</p>
+                    <p class="core-claim-label">Primary claim identified</p>
                     <p id="core-claim-text" class="core-claim-text"></p>
                 </div>
 
-                <!-- Neutral summary (hidden if not present) -->
                 <div id="neutral-summary-section" class="neutral-summary-section" style="display:none">
                     <div class="neutral-summary-header">
                         <span class="neutral-summary-icon">&#128220;</span>
                         <span class="neutral-summary-title">Neutral Summary</span>
                         <div class="neutral-summary-controls">
-                            <button class="summary-speak-btn" id="summary-speak-btn" onclick="readSummaryAloud()">&#128264; Read</button>
-                            <button class="summary-stop-btn" id="summary-stop-btn" onclick="stopSummaryAudio()" style="display:none">&#9632; Stop</button>
+                            <button class="summary-speak-btn" id="summary-speak-btn" onclick="readSummaryAloud()">Read</button>
+                            <button class="summary-stop-btn" id="summary-stop-btn" onclick="stopSummaryAudio()" style="display:none">Stop</button>
                             <button class="neutral-summary-toggle" onclick="toggleSummary()" id="summary-toggle-btn">Hide</button>
                         </div>
                     </div>
                     <div id="neutral-summary-body" class="neutral-summary-body"></div>
                 </div>
 
-                <!-- Full criteria breakdown -->
                 <div class="report-card">
                     <div class="report-card-header">
                         <span class="report-card-title">Full Breakdown</span>
@@ -200,7 +485,6 @@
                     <div id="criteria-list" class="criteria-list"></div>
                 </div>
 
-                <!-- Voice buttons -->
                 <div class="voice-section">
                     <div class="voice-buttons">
                         <button id="speak-btn" class="speak-btn" onclick="readVerdictAloud()">
@@ -210,18 +494,17 @@
                             &#9632; Stop
                         </button>
                     </div>
-                    <!-- Follow-up conversational voice questions -->
                     <div class="followup-buttons" id="followup-buttons" style="display:none">
                         <p class="followup-label">Ask a follow-up:</p>
                         <div class="followup-row">
                             <button class="followup-btn" onclick="askFollowUp('why_flagged')">
-                                &#10067; Why is this flagged?
+                                Why is this flagged?
                             </button>
                             <button class="followup-btn" onclick="askFollowUp('what_check')">
-                                &#128270; What should I verify?
+                                What should I verify?
                             </button>
                             <button class="followup-btn" onclick="askFollowUp('compare')">
-                                &#128202; Strongest signal?
+                                Strongest signal?
                             </button>
                         </div>
                     </div>
@@ -229,7 +512,7 @@
                 </div>
 
                 <button class="reset-btn" onclick="resetToInput()">
-                    &#8592; Analyze Another Article
+                    &larr; Analyze Another Article
                 </button>
 
             </div>
@@ -237,16 +520,15 @@
 
     </main>
 
-    <!-- Footer — team names included -->
     <footer class="site-footer">
         <p>
-            Criteria based on
+            Criteria from
             <a href="https://www.cyber.gc.ca/en/guidance/how-identify-misinformation-disinformation-and-malinformation-itsap00300"
                 target="_blank" rel="noopener">Canadian Centre for Cyber Security ITSAP.00.300</a>
             &mdash; Always verify with multiple sources.
         </p>
-        <p>Built at Hack Canada 2026 &middot; Powered by Google Gemini, ElevenLabs &amp; Backboard.io</p>
-        <p class="footer-team">by Adwait Gadigone, Hasan Naqvi, Haroldina Koolaid</p>
+        <p>Built at Hack Canada 2026 &middot; Google Gemini, ElevenLabs &amp; Backboard.io</p>
+        <p class="footer-team">Adwait Gadigone &middot; Hasan Naqvi &middot; Haroldina Koolaid</p>
     </footer>
 
     <script src="/static/script.js"></script>
