@@ -71,6 +71,7 @@ Developed for **Hack Canada 2026** by:
 - **Adwait Gadigone**
 - **Hasan Naqvi**
 - **Hari Kolla**
+- **Jason Yu - jestermaxxing(entertained us during the project)**
 
 ---
 *Disclaimer: This tool is for educational purposes. Always verify critical information with multiple official sources.*
