@@ -171,8 +171,8 @@
                             <div class="lp-step-num">03</div>
                             <div class="lp-step-icon">&#128202;</div>
                             <h3>Verdict</h3>
-                            <p>Get a 0&ndash;100 credibility score, MDM classification, neutral summary, and voice
-                                readout.</p>
+                            <p>Get a 0&ndash;100 credibility score, MDM classification, and a neutral,
+                                wire-style summary.</p>
                         </div>
                     </div>
                 </div>
@@ -252,7 +252,7 @@
                         Start Analyzing &nbsp;&rarr;
                     </button>
                     <p class="lp-cta-note">
-                        Powered by Google Gemini &middot; ElevenLabs &middot; Groq &middot; Backboard.io
+                        Powered by Google Gemini &middot; Groq &middot; Backboard.io
                     </p>
                 </div>
             </div>
@@ -262,7 +262,7 @@
         <!-- ═══════════════════════════════════════════════════
          INPUT SECTION
         ═══════════════════════════════════════════════════════ -->
-        <section id="input-section" class="input-section">
+        <section id="input-section" class="input-section" style="display:none">
 
             <div class="hero-section">
                 <div class="container">
@@ -479,10 +479,6 @@
                         <span class="neutral-summary-icon">&#128220;</span>
                         <span class="neutral-summary-title">Neutral Summary</span>
                         <div class="neutral-summary-controls">
-                            <button class="summary-speak-btn" id="summary-speak-btn"
-                                onclick="readSummaryAloud()">Read</button>
-                            <button class="summary-stop-btn" id="summary-stop-btn" onclick="stopSummaryAudio()"
-                                style="display:none">Stop</button>
                             <button class="neutral-summary-toggle" onclick="toggleSummary()"
                                 id="summary-toggle-btn">Hide</button>
                         </div>
@@ -496,19 +492,6 @@
                         <span class="report-card-subtitle">6 criteria &bull; ITSAP.00.300</span>
                     </div>
                     <div id="criteria-list" class="criteria-list"></div>
-                </div>
-
-                <div class="voice-section">
-                    <div class="voice-buttons">
-                        <button id="speak-btn" class="speak-btn" onclick="readVerdictAloud()">
-                            &#128264; Read Verdict Aloud
-                        </button>
-                        <button id="stop-btn" class="stop-btn" onclick="stopAudio()">
-                            &#9632; Stop
-                        </button>
-                    </div>
-
-                    <p class="voice-hint">Powered by ElevenLabs AI Voice</p>
                 </div>
 
                 <button class="reset-btn" onclick="resetToInput()">
@@ -527,7 +510,7 @@
                 target="_blank" rel="noopener">Canadian Centre for Cyber Security ITSAP.00.300</a>
             &mdash; Always verify with multiple sources.
         </p>
-        <p>Built at Hack Canada 2026 &middot; Google Gemini, ElevenLabs &amp; Backboard.io</p>
+        <p>Built at Hack Canada 2026 &middot; Google Gemini &amp; Backboard.io</p>
         <p class="footer-team">Adwait Gadigone &middot; Hasan Naqvi &middot; Hari Kolla</p>
     </footer>
 

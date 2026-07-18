@@ -7,7 +7,6 @@ Verity is an AI-powered credibility analysis tool built for Canadians. It evalua
 ## 🚀 How It Works
 - **Instant Analysis**: Submit a URL or paste text to get a Nuanced Credibility Score (0-100) instantly.
 - **Undeterminable Content Detection**: Automatically flags subjective, opinionated, or religious content. If credibility cannot be objectively verified, Verity refuses to guess and explicitly scores it as **N/A**.
-- **Audio Verdicts**: Uses ElevenLabs AI to read explanations and neutral summaries out loud.
 - **Smart Memory**: Remembers past articles to save time and API quota.
 
 ## 📊 The 6 Verification Criteria
@@ -30,7 +29,7 @@ Verity explicitly breaks down the credibility of any article across these 6 area
 
 ## 🛠️ Tech Stack
 - **Backend**: Python, Flask
-- **AI**: Google Gemini 2.0 Flash (Logic), ElevenLabs (Voice)
+- **AI**: Google Gemini 2.0 Flash, with Groq/Grok fallback
 - **AI Orchestration**: Backboard.io (Agents & RAG Memory)
 - **Frontend**: HTML5, Vanilla CSS, Vanilla JavaScript
 
@@ -50,14 +49,23 @@ Verity explicitly breaks down the credibility of any article across these 6 area
 3. **Configure Environment Variables**:
    Create a `.env` file in the root directory and add your API keys:
    ```env
-   # TruthLens API Keys
-   # These are shared among all team members
-   GEMINI_API_KEY_1=your_key_here
-   GEMINI_API_KEY_2=your_second_key_here
-   GEMINI_API_KEY_3=your_third_key_here
-   ELEVENLABS_API_KEY=your_key_here
-   BACKBOARD_API_KEY=your_key_here
+   # Required
+   GEMINI_API_KEY=your_key_here
+
+   # Optional — only add these if you need more headroom under real traffic.
+   # Any GEMINI_API_KEY_2, _3, etc. will be rotated to automatically when
+   # the current key hits a quota/rate limit.
+   # GEMINI_API_KEY_2=your_second_key_here
+
+   # Optional — free-tier fallback used only if all Gemini keys are exhausted
    GROQ_API_KEY=your_key_here
+
+   # Optional — multi-agent orchestration / semantic memory
+   BACKBOARD_API_KEY=your_key_here
+
+   # Optional — shared rate-limit storage for multi-instance deployments
+   # (defaults to in-process memory, which is fine for a single instance)
+   # RATELIMIT_STORAGE_URI=redis://default:<password>@<host>:<port>
    ```
 
 4. **Run the application**:

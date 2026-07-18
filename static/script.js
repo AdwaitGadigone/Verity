@@ -6,7 +6,6 @@
  *   - Sending requests to Flask backend (/analyze)
  *   - Animating the loading checklist
  *   - Rendering verdict + criteria breakdown
- *   - ElevenLabs voice playback with Stop button
  *
  * IMPORTANT — ELEMENT ID MAP (must match index.html exactly):
  *   input-section            — wraps hero + input card
@@ -25,15 +24,11 @@
  *   core-claim-section       — wrapper (hidden if no claim)
  *   core-claim-text          — the claim text
  *   criteria-list            — ul of criterion rows
- *   speak-btn / stop-btn     — ElevenLabs controls
  */
 
 // ── Global state ─────────────────────────────────────────────────
 let currentMode = "url";        // "url" or "text"
-let lastResult = null;          // stored for voice readout
-let currentAudio = null;        // currently-playing Audio object (verdict/follow-up)
-let summaryAudio = null;        // currently-playing Audio object (summary)
-let isPlayingExplain = false;   // true while a follow-up is playing
+let lastResult = null;          // stored for re-analysis / history
 
 // ── Criterion icons (matched to key names from scorer.py) ────────
 const CRITERION_ICONS = {
@@ -85,10 +80,7 @@ function showAnalyzer() {
 
 // Go back to the landing page (logo click)
 function goToLanding() {
-  if (currentAudio) { currentAudio.pause(); currentAudio = null; }
-  if (summaryAudio) { summaryAudio.pause(); summaryAudio = null; }
   lastResult = null;
-  isPlayingExplain = false;
   showSection("landing-section");
   window.scrollTo({ top: 0, behavior: "smooth" });
   // Trigger demo bar animations again
@@ -152,7 +144,6 @@ async function runAnalysis() {
     lastResult = data;
     renderResults(data);
     showSection("results-section");
-    showFollowUpButtons();
     loadHistory();  // Refresh history sidebar with the new result
 
   } catch (err) {
@@ -230,20 +221,17 @@ function renderResults(data) {
     list.innerHTML = "";
     (data.criteria || []).forEach(c => {
       const score = c.score || 0;
-      
-      let tier = score >= 72 ? "score-high" : score >= 45 ? "score-mid" : "score-low";
-      let badgeText = score + "/100";
-      let barDisplay = "";
-      let barWidth = score;
+      const isNA = data.is_undeterminable || c.is_na;
 
-      if (data.is_undeterminable) {
-          badgeText = "N/A / 100";
-          barDisplay = 'style="display:none"';
-      } else if (c.is_na) {
-          tier = "score-mid"; // Neutral colour for N/A
-          badgeText = c.badge_text || "N/A";
-          barDisplay = 'style="display:none"';
-      }
+      // N/A must never inherit a score tier (was falling through to
+      // "score-low" / red before this was set, making an undeterminable
+      // result look like a bad score instead of "we can't tell").
+      let tier = isNA
+        ? "score-na"
+        : score >= 72 ? "score-high" : score >= 45 ? "score-mid" : "score-low";
+      let badgeText = isNA ? (c.badge_text || "N/A") : (score + "/100");
+      let barDisplay = isNA ? 'style="display:none"' : "";
+      let barWidth = score;
 
       const icon = CRITERION_ICONS[c.key] || "📊";
 
@@ -291,11 +279,6 @@ function renderResults(data) {
     }
   }
 
-  // ── Reset voice buttons ───────────────────────────────────────
-  const stopBtn = el("stop-btn");
-  const speakBtn = el("speak-btn");
-  if (stopBtn) stopBtn.style.display = "none";
-  if (speakBtn) speakBtn.disabled = false;
 }
 
 
@@ -387,159 +370,12 @@ function animateGauge(score, verdictClass, isUndeterminable = false) {
 
 
 // ══════════════════════════════════════════════════════════════════
-// ELEVENLABS VOICE — Play
-// ══════════════════════════════════════════════════════════════════
-async function readVerdictAloud() {
-  if (!lastResult) return;
-
-  const speakBtn = el("speak-btn");
-  const stopBtn = el("stop-btn");
-
-  if (speakBtn) { speakBtn.disabled = true; speakBtn.textContent = "Generating audio…"; }
-
-  // Pick the weakest criterion to highlight in the readout
-  const criteria = lastResult.criteria || [];
-  const weakest = criteria.length
-    ? criteria.reduce((min, c) => c.score < min.score ? c : min, criteria[0])
-    : null;
-
-  const speechText =
-    "Verity analysis complete. " +
-    (lastResult.is_undeterminable 
-      ? "This content has a credibility score of Not Applicable and is rated " 
-      : "This content scored " + lastResult.final_score + " out of 100 and is rated ") +
-    lastResult.verdict + ". " +
-    (lastResult.verdict_subtext || "") + " " +
-    "It has been classified as " + lastResult.mdm_classification +
-    " under the Canadian Centre for Cyber Security framework. " +
-    (weakest
-      ? "The area of most concern is " + weakest.label +
-      ", which scored " + weakest.score + " out of 100. " + weakest.reason + " "
-      : ""
-    ) +
-    "Always verify information with multiple trusted sources before sharing.";
-
-  try {
-    const response = await fetch("/speak", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text: speechText }),
-    });
-
-    if (!response.ok) throw new Error("Speech generation failed (HTTP " + response.status + ")");
-
-    const audioBlob = await response.blob();
-    const audioUrl = URL.createObjectURL(audioBlob);
-
-    if (currentAudio) { currentAudio.pause(); currentAudio = null; }
-
-    currentAudio = new Audio(audioUrl);
-    if (stopBtn) stopBtn.style.display = "inline-block";
-    if (speakBtn) speakBtn.textContent = "🔊 Playing…";
-
-    currentAudio.play();
-    currentAudio.onended = () => {
-      URL.revokeObjectURL(audioUrl);
-      currentAudio = null;
-      if (stopBtn) stopBtn.style.display = "none";
-      if (speakBtn) { speakBtn.textContent = "🔊 Read Verdict Aloud"; speakBtn.disabled = false; }
-    };
-
-  } catch (err) {
-    if (speakBtn) { speakBtn.textContent = "🔊 Read Verdict Aloud"; speakBtn.disabled = false; }
-    if (stopBtn) stopBtn.style.display = "none";
-    alert("Voice unavailable: " + err.message);
-  }
-}
-
-
-// ══════════════════════════════════════════════════════════════════
-// ELEVENLABS VOICE — Stop
-// ══════════════════════════════════════════════════════════════════
-function stopAudio() {
-  if (currentAudio) {
-    currentAudio.onended = null;  // prevent double-cleanup via dispatch
-    currentAudio.pause();
-    currentAudio = null;
-    const stopBtn = el("stop-btn");
-    const speakBtn = el("speak-btn");
-    if (stopBtn) stopBtn.style.display = "none";
-    if (speakBtn) { speakBtn.textContent = "\uD83D\uDD0A Read Verdict Aloud"; speakBtn.disabled = false; }
-  }
-}
-
-
-// ══════════════════════════════════════════════════════════════════
-// SUMMARY VOICE — Read neutral summary aloud via ElevenLabs
-// ══════════════════════════════════════════════════════════════════
-async function readSummaryAloud() {
-  if (!lastResult || !lastResult.neutral_summary) return;
-
-  const speakBtn = el("summary-speak-btn");
-  const stopBtn  = el("summary-stop-btn");
-
-  if (speakBtn) { speakBtn.disabled = true; speakBtn.textContent = "Generating…"; }
-
-  // Stop any other audio playing
-  if (currentAudio) { currentAudio.pause(); currentAudio = null; }
-  if (summaryAudio) { summaryAudio.pause(); summaryAudio = null; }
-
-  try {
-    const response = await fetch("/speak", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text: lastResult.neutral_summary }),
-    });
-
-    if (!response.ok) throw new Error("Speech generation failed (HTTP " + response.status + ")");
-
-    const audioBlob = await response.blob();
-    const audioUrl  = URL.createObjectURL(audioBlob);
-
-    summaryAudio = new Audio(audioUrl);
-    if (stopBtn)  stopBtn.style.display  = "inline-block";
-    if (speakBtn) speakBtn.textContent   = "🔊 Playing…";
-
-    summaryAudio.play();
-    summaryAudio.onended = () => {
-      URL.revokeObjectURL(audioUrl);
-      summaryAudio = null;
-      if (stopBtn)  stopBtn.style.display  = "none";
-      if (speakBtn) { speakBtn.textContent = "🔊 Read"; speakBtn.disabled = false; }
-    };
-
-  } catch (err) {
-    if (speakBtn) { speakBtn.textContent = "🔊 Read"; speakBtn.disabled = false; }
-    if (stopBtn)  stopBtn.style.display  = "none";
-    alert("Summary voice unavailable: " + err.message);
-  }
-}
-
-function stopSummaryAudio() {
-  if (summaryAudio) {
-    summaryAudio.onended = null;  // prevent double-cleanup
-    summaryAudio.pause();
-    summaryAudio = null;
-    const stopBtn = el("summary-stop-btn");
-    const speakBtn = el("summary-speak-btn");
-    if (stopBtn) stopBtn.style.display = "none";
-    if (speakBtn) { speakBtn.textContent = "\uD83D\uDD0A Read"; speakBtn.disabled = false; }
-  }
-}
-
-
-// ══════════════════════════════════════════════════════════════════
 // RESET — called by logo click or "Analyze Another Article"
 // ══════════════════════════════════════════════════════════════════
 function resetToInput() {
-  if (currentAudio) { currentAudio.onended = null; currentAudio.pause(); currentAudio = null; }
-  if (summaryAudio) { summaryAudio.onended = null; summaryAudio.pause(); summaryAudio = null; }
   lastResult = null;
-  isPlayingExplain = false;
   const ui = el("url-input"); if (ui) ui.value = "";
   const ti = el("text-input"); if (ti) ti.value = "";
-  const followup = el("followup-buttons");
-  if (followup) followup.style.display = "none";
   document.querySelectorAll(".error-banner").forEach(b => b.remove());
   // Clear loading checklist done-state for the next analysis
   ["lc-domain","lc-emotional","lc-factual","lc-author","lc-content","lc-mdm"]
@@ -577,60 +413,6 @@ function esc(str) {
   d.textContent = str || "";
   return d.innerHTML;
 }
-
-// ══════════════════════════════════════════════════════════════════
-// ELEVENLABS FOLLOW-UP (conversational voice questions)
-// ══════════════════════════════════════════════════════════════════
-async function askFollowUp(questionType) {
-  if (!lastResult || isPlayingExplain) return;
-
-  isPlayingExplain = true;
-  const stopBtn = el("stop-btn");
-  if (stopBtn) stopBtn.style.display = "inline-block";
-
-  // Dim the follow-up buttons while loading
-  document.querySelectorAll(".followup-btn").forEach(b => {
-    b.disabled = true;
-    b.style.opacity = "0.5";
-  });
-
-  try {
-    const response = await fetch("/explain", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ question_type: questionType, verdict_data: lastResult }),
-    });
-
-    if (!response.ok) throw new Error("Explain failed (HTTP " + response.status + ")");
-
-    const audioBlob = await response.blob();
-    const audioUrl = URL.createObjectURL(audioBlob);
-
-    if (currentAudio) { currentAudio.pause(); currentAudio = null; }
-
-    currentAudio = new Audio(audioUrl);
-    currentAudio.play();
-    currentAudio.onended = () => {
-      URL.revokeObjectURL(audioUrl);
-      currentAudio = null;
-      isPlayingExplain = false;
-      if (stopBtn) stopBtn.style.display = "none";
-      document.querySelectorAll(".followup-btn").forEach(b => {
-        b.disabled = false;
-        b.style.opacity = "1";
-      });
-    };
-  } catch (err) {
-    isPlayingExplain = false;
-    if (stopBtn) stopBtn.style.display = "none";
-    document.querySelectorAll(".followup-btn").forEach(b => {
-      b.disabled = false;
-      b.style.opacity = "1";
-    });
-    alert("Follow-up unavailable: " + err.message);
-  }
-}
-
 
 // ══════════════════════════════════════════════════════════════════
 // HISTORY — load and render recent analyses
@@ -700,15 +482,6 @@ function toggleSummary() {
   const isVisible = body.style.display !== "none";
   body.style.display = isVisible ? "none" : "block";
   btn.textContent = isVisible ? "Show" : "Hide";
-}
-
-
-// ══════════════════════════════════════════════════════════════════
-// Show follow-up buttons after verdict is rendered
-// ══════════════════════════════════════════════════════════════════
-function showFollowUpButtons() {
-  const followup = el("followup-buttons");
-  if (followup) followup.style.display = "block";
 }
 
 

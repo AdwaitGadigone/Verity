@@ -123,6 +123,31 @@ html {
   scroll-behavior: smooth;
 }
 
+/* Keyboard focus visibility (WCAG) — additive only, no colour change */
+:focus-visible {
+  outline: 2.5px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.site-header :focus-visible {
+  outline-color: var(--gold);
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+
+  html {
+    scroll-behavior: auto;
+  }
+}
+
 /* ── Background ─────────────────────────────────────────────── */
 body {
   background: #f0f2f5;
@@ -898,8 +923,6 @@ a:hover {
   gap: 6px;
 }
 
-.summary-speak-btn,
-.summary-stop-btn,
 .neutral-summary-toggle {
   font-family: var(--font-mono);
   font-size: 10px;
@@ -910,33 +933,6 @@ a:hover {
   cursor: pointer;
   transition: all 0.15s;
   border: 1.5px solid var(--accent);
-}
-
-.summary-speak-btn {
-  background: var(--accent);
-  color: #fff;
-}
-
-.summary-speak-btn:hover:not(:disabled) {
-  background: var(--green-dark);
-}
-
-.summary-speak-btn:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-}
-
-.summary-stop-btn {
-  background: #fee2e2;
-  color: #991b1b;
-  border-color: #fca5a5;
-}
-
-.summary-stop-btn:hover {
-  background: #fecaca;
-}
-
-.neutral-summary-toggle {
   color: var(--accent);
   background: none;
   border-color: var(--accent-border);
@@ -1059,6 +1055,11 @@ a:hover {
   border-color: var(--v-bd-border);
 }
 
+.criterion-row.score-na .criterion-icon {
+  background: var(--v-ud-tint);
+  border-color: var(--v-ud-border);
+}
+
 .criterion-label {
   font-size: 14px;
   font-weight: 600;
@@ -1093,6 +1094,10 @@ a:hover {
 
 .criterion-row.score-low .criterion-score-badge {
   color: var(--score-bd);
+}
+
+.criterion-row.score-na .criterion-score-badge {
+  color: var(--score-ud);
 }
 
 .progress-track {
@@ -1144,113 +1149,11 @@ a:hover {
   border-left-color: #dc2626;
 }
 
-/* ── VOICE / RESET ────────────────────────────────────────────── */
-.voice-section {
-  text-align: center;
-  margin-bottom: 16px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
+.criterion-row.score-na .criterion-reason {
+  border-left-color: var(--score-ud);
 }
 
-.voice-buttons {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-}
-
-.speak-btn {
-  padding: 10px 20px;
-  background: var(--blue-light);
-  border: 1.5px solid var(--blue-border);
-  border-radius: var(--r-sm);
-  color: var(--blue);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.06em;
-  cursor: pointer;
-  transition: all var(--transition);
-}
-
-.speak-btn:hover {
-  background: var(--blue);
-  color: #fff;
-}
-
-.speak-btn:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
-.stop-btn {
-  padding: 10px 16px;
-  background: #fee2e2;
-  border: 1.5px solid #fca5a5;
-  border-radius: var(--r-sm);
-  color: #991b1b;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.06em;
-  cursor: pointer;
-  transition: all var(--transition);
-  display: none;
-}
-
-.stop-btn:hover {
-  background: #fecaca;
-}
-
-.voice-hint {
-  font-family: var(--font-mono);
-  font-size: 9px;
-  letter-spacing: 0.08em;
-  color: var(--t4);
-  text-transform: uppercase;
-}
-
-.followup-buttons {
-  margin-top: 8px;
-  text-align: center;
-}
-
-.followup-label {
-  font-family: var(--font-mono);
-  font-size: 9px;
-  letter-spacing: 0.10em;
-  text-transform: uppercase;
-  color: var(--t4);
-  margin-bottom: 8px;
-}
-
-.followup-row {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  justify-content: center;
-}
-
-.followup-btn {
-  padding: 7px 14px;
-  background: #fff;
-  border: 1.5px solid var(--b1);
-  border-radius: var(--r-sm);
-  color: var(--t2);
-  font-size: 12px;
-  cursor: pointer;
-  transition: all var(--transition);
-}
-
-.followup-btn:hover:not(:disabled) {
-  border-color: var(--accent);
-  color: var(--accent);
-  background: var(--accent-dim);
-}
-
-.followup-btn:disabled {
-  cursor: not-allowed;
-}
-
+/* ── RESET ────────────────────────────────────────────── */
 .reset-btn {
   display: block;
   width: 100%;
@@ -1528,6 +1431,9 @@ a:hover {
 
 .lp-hero-text {
   color: var(--t1);
+  min-width: 0;
+  /* grid items default to min-width:auto, which can force this track
+     wider than the viewport on mobile once the row collapses to 1fr */
 }
 
 .lp-eyebrow {
@@ -1694,15 +1600,18 @@ a:hover {
 .lp-hero-card {
   display: flex;
   justify-content: flex-end;
+  min-width: 0;
 }
 
 .lp-demo-card {
   background: #fff;
   border: 1.5px solid var(--b1);
+  border-top: 3px solid var(--accent);
   border-radius: var(--r-xl);
   padding: 24px;
   width: 100%;
   max-width: 360px;
+  min-width: 0;
   color: var(--t1);
   box-shadow: var(--shadow-lg);
 }

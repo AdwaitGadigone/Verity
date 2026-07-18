@@ -32,11 +32,10 @@ HOW TO RUN THIS:
 ROUTES IN THIS APP:
   GET  /         → Shows the Verity homepage (index.html)
   POST /analyze  → Takes a URL or text, runs all 6 criteria, returns scores
-  POST /speak    → Takes verdict text, returns audio from ElevenLabs
+  GET  /history  → Returns the last 20 analyses from this session
 """
 
 import os
-import json
 from datetime import datetime, timezone
 from collections import deque
 
@@ -45,14 +44,19 @@ from collections import deque
 # - request: lets us read data sent by the browser
 # - jsonify: converts Python dicts to JSON responses
 # - render_template: sends HTML files from the templates/ folder
-# - Response: lets us send raw bytes (used for audio)
-from flask import Flask, request, jsonify, render_template, Response
+from flask import Flask, request, jsonify, render_template
 
 # CORS = Cross-Origin Resource Sharing
 # Without this, browsers block JavaScript from talking to our server
 # because the browser thinks it might be a security risk
 # (It's a browser safety feature — we disable it for local development)
 from flask_cors import CORS
+
+# Flask-Limiter caps how many requests a single visitor can make, so one
+# user (or a script) can't hammer /analyze and burn through the Gemini quota
+# or run up costs for everyone else.
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 
 # python-dotenv reads API keys from our .env file
 from dotenv import load_dotenv
@@ -65,7 +69,6 @@ from backboard_client import orchestrator  # Backboard multi-agent orchestrator
 # Load API keys from .env file
 load_dotenv()
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY")
 
 # ── In-memory analysis history (last 20 analyses) ────────────────────────────
 # In production this would use Backboard's persistent semantic memory.
@@ -79,6 +82,24 @@ app = Flask(__name__)
 
 # Allow the browser's JavaScript to talk to our server
 CORS(app)
+
+# ── Rate limiting ─────────────────────────────────────────────────────────────
+# Storage defaults to in-process memory, which is fine for `python app.py`
+# but does NOT share counters across multiple worker processes/instances
+# (e.g. a multi-instance serverless deploy). For that, set RATELIMIT_STORAGE_URI
+# to a shared backend, e.g. Redis/Upstash: redis://default:<pw>@<host>:<port>
+limiter = Limiter(
+    key_func=get_remote_address,
+    app=app,
+    storage_uri=os.getenv("RATELIMIT_STORAGE_URI", "memory://"),
+    default_limits=["60 per minute", "1000 per day"],
+)
+
+
+@app.errorhandler(429)
+def rate_limit_exceeded(e):
+    """Matches the app's JSON error style instead of Flask-Limiter's default plain text."""
+    return jsonify({"error": "Too many requests. Please slow down and try again shortly."}), 429
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -100,6 +121,7 @@ def index():
 # ROUTE 2: Analyze an article
 # ══════════════════════════════════════════════════════════════════════════════
 @app.route("/analyze", methods=["POST"])
+@limiter.limit("6 per minute; 60 per hour")
 def analyze():
     """
     This is the main analysis endpoint — the brain of Verity.
@@ -125,6 +147,16 @@ def analyze():
 
         if not user_input:
             return jsonify({"error": "No input provided"}), 400
+
+        # ── Reject absurdly large payloads before they reach Gemini ────────
+        # Protects API quota/cost from abuse; a real article is a few
+        # thousand words, so 50k characters is generous headroom.
+        MAX_INPUT_CHARS = 50_000
+        if len(user_input) > MAX_INPUT_CHARS:
+            return jsonify({
+                "error": f"Input is too long ({len(user_input):,} characters). "
+                         f"Please paste no more than {MAX_INPUT_CHARS:,} characters."
+            }), 400
 
         # ── TEST BYPASS FOR NO-QUOTA DEMO ──────────────────────────────
         if user_input.strip().upper() == "TEST UNDETERMINABLE":
@@ -198,72 +230,6 @@ def analyze():
         return jsonify({"error": f"Analysis failed: {str(e)}"}), 500
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# ROUTE 3: Text-to-speech (ElevenLabs)
-# ══════════════════════════════════════════════════════════════════════════════
-@app.route("/speak", methods=["POST"])
-def speak():
-    """
-    This endpoint converts text to speech using ElevenLabs AI.
-
-    HOW IT WORKS:
-      1. The browser sends us JSON: {"text": "Verity analysis complete..."}
-      2. We send that text to ElevenLabs' API
-      3. ElevenLabs sends back audio (MP3 bytes)
-      4. We send those audio bytes to the browser
-      5. The browser plays the audio
-
-    WHAT IS ELEVENLABS?
-    ElevenLabs is an AI company that generates realistic human-sounding speech.
-    We use it for the "Read Verdict Aloud" button — it reads the analysis
-    results to the user in a natural voice.
-    """
-    if not ELEVENLABS_API_KEY:
-        return jsonify({"error": "ElevenLabs API key not configured"}), 503
-
-    try:
-        data = request.get_json()
-        text = data.get("text", "")
-
-        if not text:
-            return jsonify({"error": "No text provided"}), 400
-
-        # Import the ElevenLabs SDK (their Python library)
-        # We import it here instead of at the top because it's only used
-        # for this one feature, and the app still works without it
-        from elevenlabs import ElevenLabs
-
-        # Create a connection to ElevenLabs using our API key
-        client = ElevenLabs(api_key=ELEVENLABS_API_KEY)
-
-        # Generate speech from text
-        # - voice_id: "George" — a deep, authoritative voice that sounds
-        #   professional for a fact-checking tool
-        # - model_id: "eleven_multilingual_v2" — their best quality model
-        # - output_format: MP3 audio at 44100 Hz, 128 kbps
-        audio_generator = client.text_to_speech.convert(
-            voice_id="JBFqnCBsd6RMkjVDRZzb",  # "George" voice
-            text=text,
-            model_id="eleven_multilingual_v2",
-            output_format="mp3_44100_128",
-        )
-
-        # The generator gives us audio in chunks — join them into one blob
-        # b"" is an empty bytes object, and b"".join() combines byte chunks
-        audio_bytes = b"".join(audio_generator)
-
-        # Send the MP3 audio back to the browser
-        # Response() lets us send raw bytes with the right content type
-        return Response(
-            audio_bytes,
-            mimetype="audio/mpeg",  # tells the browser "this is an MP3 file"
-            headers={"Content-Disposition": "inline; filename=verdict.mp3"}
-        )
-
-    except Exception as e:
-        print(f"[ERROR] /speak: {e}")
-        return jsonify({"error": f"Text-to-speech failed: {str(e)}"}), 500
-
 
 # ══════════════════════════════════════════════════════════════════════════════
 # ROUTE 4: Analysis history
@@ -276,88 +242,6 @@ def history():
     persistent cross-session results.
     """
     return jsonify(list(_analysis_history)), 200
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-# ROUTE 5: Conversational explain (for follow-up voice questions)
-# ══════════════════════════════════════════════════════════════════════════════
-@app.route("/explain", methods=["POST"])
-def explain():
-    """
-    Generates a focused spoken explanation answering a follow-up question
-    about the analysis, then converts it to ElevenLabs audio.
-
-    question_type options:
-      "why_flagged"   — explains the worst-scoring criterion in detail
-      "what_check"    — gives specific verification recommendations
-      "compare"       — how this outlet has performed historically
-    """
-    if not ELEVENLABS_API_KEY:
-        return jsonify({"error": "ElevenLabs API key not configured"}), 503
-
-    try:
-        data = request.get_json()
-        question_type = data.get("question_type", "why_flagged")
-        verdict_data = data.get("verdict_data", {})
-
-        criteria = verdict_data.get("criteria", [])
-        verdict = verdict_data.get("verdict", "Questionable")
-        final_score = verdict_data.get("final_score", 50)
-        mdm = verdict_data.get("mdm_classification", "Unsustainable")
-
-        # Find weakest and strongest criteria
-        weakest = min(criteria, key=lambda c: c["score"]) if criteria else None
-        strongest = max(criteria, key=lambda c: c["score"]) if criteria else None
-
-        if question_type == "why_flagged":
-            if weakest:
-                speech_text = (
-                    f"The biggest concern is {weakest['label']}, which scored "
-                    f"{weakest['score']} out of 100. {weakest['reason']} "
-                    f"This is weighted at {weakest['weight']} of the total score, "
-                    f"making it a significant factor in the overall {verdict} rating."
-                )
-            else:
-                speech_text = f"This content scored {final_score} out of 100. No specific criterion data is available."
-
-        elif question_type == "what_check":
-            checks = []
-            for c in sorted(criteria, key=lambda x: x["score"])[:3]:
-                checks.append(f"For {c['label']}: {c['reason']}")
-            speech_text = (
-                "Here are the top things to verify before sharing this content. "
-                + " ".join(checks) + " "
-                "Always cross-reference with CBC, Globe and Mail, or official government sources."
-            )
-
-        elif question_type == "compare":
-            if strongest:
-                speech_text = (
-                    f"The strongest signal for this content is {strongest['label']}, "
-                    f"scoring {strongest['score']} out of 100. {strongest['reason']} "
-                    f"Overall, this content is classified as {mdm} under the "
-                    f"Canadian Centre for Cyber Security framework."
-                )
-            else:
-                speech_text = f"This content is classified as {mdm} with a score of {final_score} out of 100."
-        else:
-            speech_text = f"This content scored {final_score} out of 100 and is rated {verdict}."
-
-        from elevenlabs import ElevenLabs
-        client = ElevenLabs(api_key=ELEVENLABS_API_KEY)
-        audio_generator = client.text_to_speech.convert(
-            voice_id="JBFqnCBsd6RMkjVDRZzb",
-            text=speech_text,
-            model_id="eleven_multilingual_v2",
-            output_format="mp3_44100_128",
-        )
-        audio_bytes = b"".join(audio_generator)
-        return Response(audio_bytes, mimetype="audio/mpeg",
-                        headers={"Content-Disposition": "inline; filename=explain.mp3"})
-
-    except Exception as e:
-        print(f"[ERROR] /explain: {e}")
-        return jsonify({"error": f"Explain failed: {str(e)}"}), 500
 
 
 # ══════════════════════════════════════════════════════════════════════════════

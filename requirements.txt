@@ -1,5 +1,6 @@
 flask
 flask-cors
+flask-limiter
 google-genai
 openai
 python-whois
@@ -7,5 +8,4 @@ newspaper4k
 beautifulsoup4
 requests
 python-dotenv
-elevenlabs
 backboard-sdk==1.5.3

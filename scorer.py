@@ -153,8 +153,10 @@ def _apply_trusted_source_boost(results: dict, domain: str) -> dict:
 def _run_criterion_safely(name: str, func, *args) -> dict:
     """
     Runs a single criterion function with error protection.
-    If the criterion crashes, returns a safe neutral score of 50
-    instead of letting the whole app crash.
+    If the criterion crashes, it's marked N/A rather than given a fake
+    neutral score — a crash means "we don't know", not "it scored exactly
+    average". run_all() excludes N/A criteria from the weighted final score
+    instead of letting a fabricated 50 quietly skew it.
     """
     try:
         result = func(*args)
@@ -163,8 +165,11 @@ def _run_criterion_safely(name: str, func, *args) -> dict:
     except Exception as e:
         return {
             "name": name,
-            "score": 50,
-            "reason": f"Could not verify — treated as neutral ({str(e)[:60]})",
+            "score": 0,
+            "is_na": True,
+            "badge_text": "Error",
+            "reason": f"Could not verify due to an internal error ({str(e)[:60]}). "
+                      "Excluded from the overall score rather than guessed at.",
             "error": True
         }
 
@@ -215,12 +220,16 @@ def run_all(article_data: dict) -> dict:
     # Apply trusted-source adjustments (e.g. for canada.ca, cbc.ca)
     results = _apply_trusted_source_boost(results, domain)
 
-    # Calculate the weighted final score (as a fallback if Gemini fails)
-    fallback_score = sum(
+    # Calculate the weighted final score (as a fallback if Gemini fails).
+    # Criteria that crashed (is_na) are excluded and their weight is
+    # redistributed proportionally among the ones that actually ran —
+    # a failed check should never silently pull the score toward 50.
+    weighted_sum = sum(
         results[key]["score"] * WEIGHTS[key]
-        for key in WEIGHTS
+        for key in WEIGHTS if not results[key].get("is_na")
     )
-    fallback_score = int(round(fallback_score))
+    weight_total = sum(WEIGHTS[key] for key in WEIGHTS if not results[key].get("is_na"))
+    fallback_score = int(round(weighted_sum / weight_total)) if weight_total > 0 else 50
 
     # Read final score from the mega cache (already computed in the single call above).
     # Falls back to the weighted math if the mega call failed.

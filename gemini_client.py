@@ -146,14 +146,17 @@ def get_batch_result(article_text: str, title: str, analysis_type: str) -> dict 
         return batch.get(analysis_type)
     return None
 
-# ── Set up Gemini clients (cycles through all GEMINI_API_KEY_* keys) ──────────
-_api_keys = []
-for key, value in os.environ.items():
-    if key.startswith("GEMINI_API_KEY") and value.strip():
-        _api_keys.append(value.strip())
-
-if not _api_keys and os.getenv("GEMINI_API_KEY"):
-    _api_keys.append(os.getenv("GEMINI_API_KEY"))
+# ── Set up Gemini client(s) ────────────────────────────────────────────────
+# A single GEMINI_API_KEY is all that's required. If you need more headroom
+# (e.g. free-tier rate limits under real traffic), add GEMINI_API_KEY_2,
+# GEMINI_API_KEY_3, etc. and call_gemini() will rotate to the next one on a
+# 429/quota error. Sorted so rotation order is deterministic (_1, _2, _3...).
+_api_keys = sorted(
+    (key, value.strip())
+    for key, value in os.environ.items()
+    if key.startswith("GEMINI_API_KEY") and value.strip()
+)
+_api_keys = [value for _, value in _api_keys]
 
 _clients = []
 _current_client_idx = 0
@@ -183,16 +186,6 @@ except ImportError:
     print("[Groq] openai package not installed. Run: pip install openai")
 except Exception as e:
     print(f"[Groq] Client init failed: {e}")
-try:
-    _groq_key = os.getenv("GROQ_API_KEY", "").strip()
-    if _groq_key:
-        from openai import OpenAI as _OpenAI
-        _groq_client = _OpenAI(api_key=_groq_key, base_url="https://api.groq.com/openai/v1")
-        print("[Groq] Fallback client ready (llama-3.3-70b-versatile).")
-except ImportError:
-    print("[Groq] openai package not installed. Run: pip install openai")
-except Exception as e:
-    print(f"[Groq] Client init failed: {e}")
 
 # ── Set up Grok fallback client (xAI, paid) ───────────────────────────────────
 _grok_client = None
@@ -206,6 +199,43 @@ except Exception as e:
     print(f"[Grok] Client init failed: {e}")
 
 
+def _extract_json(text: str) -> dict | None:
+    """
+    Parses a model response into a dict, tolerating the two most common
+    ways an LLM breaks a "respond with ONLY JSON" instruction:
+      - wrapping the payload in a ```json ... ``` markdown fence
+      - adding stray text before/after the { ... } object
+    Returns None if no valid JSON object can be recovered.
+    """
+    if not text:
+        return None
+    text = text.strip()
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+
+    if text.startswith("```"):
+        # Strip a leading ```json / ``` fence and a trailing ```
+        text = text.split("```", 2)[1] if text.count("```") >= 2 else text
+        text = text[4:] if text.startswith("json") else text
+        text = text.strip().strip("`").strip()
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError:
+            pass
+
+    # Last resort: grab the outermost { ... } span
+    start, end = text.find("{"), text.rfind("}")
+    if start != -1 and end != -1 and end > start:
+        try:
+            return json.loads(text[start:end + 1])
+        except json.JSONDecodeError:
+            pass
+
+    return None
+
+
 def _call_openai_compatible(client, model: str, prompt: str) -> dict | None:
     """Shared helper for OpenAI-compatible providers (Groq, Grok)."""
     if not client:
@@ -214,7 +244,7 @@ def _call_openai_compatible(client, model: str, prompt: str) -> dict | None:
         # Groq/Grok strict requirement: the word "json" MUST be in the prompt if response_format is used
         if "json" not in prompt.lower():
             prompt += "\n\nProvide the output in valid JSON format."
-            
+
         response = client.chat.completions.create(
             model=model,
             messages=[{"role": "user", "content": prompt}],
@@ -222,9 +252,7 @@ def _call_openai_compatible(client, model: str, prompt: str) -> dict | None:
             temperature=0.1,
             max_tokens=4096,
         )
-        return json.loads(response.choices[0].message.content)
-    except json.JSONDecodeError:
-        return None
+        return _extract_json(response.choices[0].message.content)
     except Exception as e:
         print(f"[{model}] error: {e}")
         return None
@@ -232,8 +260,9 @@ def _call_openai_compatible(client, model: str, prompt: str) -> dict | None:
 
 def call_gemini(prompt: str, model: str = "gemini-2.0-flash") -> dict | None:
     """
-    Sends a prompt to Gemini (primary) or Grok (fallback when quota exhausted).
-    Returns a parsed JSON dict, or None if all providers fail.
+    Sends a prompt to Gemini (primary, rotating through all configured keys),
+    then falls back to Groq and Grok. Returns a parsed JSON dict, or None if
+    every provider fails.
     """
     global _current_client_idx
 
@@ -250,10 +279,15 @@ def call_gemini(prompt: str, model: str = "gemini-2.0-flash") -> dict | None:
                     max_output_tokens=4096,
                 ),
             )
-            return json.loads(response.text)
+            parsed = _extract_json(response.text)
+            if parsed is not None:
+                return parsed
+            # Malformed JSON from this key doesn't mean the next key/provider
+            # will fail too — keep trying rather than giving up immediately.
+            print(f"[Gemini] Key #{_current_client_idx + 1} returned unparsable JSON. Trying next...")
+            _current_client_idx = (_current_client_idx + 1) % len(_clients)
+            continue
 
-        except json.JSONDecodeError:
-            return None
         except Exception as e:
             error_msg = str(e).lower()
             if "429" in error_msg or "quota" in error_msg or "exhausted" in error_msg or "400" in error_msg or "expired" in error_msg or "invalid" in error_msg:
@@ -262,7 +296,7 @@ def call_gemini(prompt: str, model: str = "gemini-2.0-flash") -> dict | None:
                 continue
             else:
                 print(f"[Gemini error] {e}")
-                return None
+                break
 
     # ── All Gemini keys exhausted — try Groq (free) then Grok (paid) ─────────
     if _groq_client:
@@ -276,67 +310,4 @@ def call_gemini(prompt: str, model: str = "gemini-2.0-flash") -> dict | None:
         return _call_openai_compatible(_grok_client, "grok-2-latest", prompt)
 
     print("[AI] All providers exhausted. No result available.")
-    return None
-
-
-def gemini_final_score(criteria_results: dict, domain: str, article_text: str = "") -> dict | None:
-    """
-    Sends the 6 criteria results to Gemini and asks it to determine the FINAL overall credibility score.
-    Returns a dictionary with 'final_score' (0-100) and 'verdict_subtext'.
-    """
-    if not _clients:
-        return None
-
-    global _current_client_idx
-
-    # Format the criteria summary for the prompt
-    summary = ""
-    for k, v in criteria_results.items():
-        summary += f"- {k.title()} Score: {v.get('score')}/100. Reason: {v.get('reason')}\n"
-
-    prompt = f"""
-    You are the final judge for a Canadian misinformation detection tool called Verity.
-    Your job is to look at the scores from 6 automated criteria and determine the final overall credibility score (0-100).
-
-    DOMAIN: {domain}
-    CRITERIA RESULTS:
-    {summary}
-
-    Given these 6 factors, what is the TRUE overall credibility of this source/content?
-    For official government domains (like .gc.ca, canada.ca) or established major news outlets, the final score should reflect their high institutional credibility, even if technical criteria like "Author name" scored lower (since institutions often don't use personal bylines).
-    For random blogs or fake news sites, the score should reflect the danger.
-
-    CRITICAL INSTRUCTION: In your `verdict_subtext`, you MUST clearly state the **TYPE** of content this is (e.g., "This is an opinion piece", "This is a movie review", "This is objective news reporting", "This is satire") as part of your brief justification for the score.
-
-    Respond ONLY in valid JSON format exactly like this:
-    {{
-      "final_score": 85,
-      "verdict_subtext": "This is objective news reporting from an official Canadian government source with high institutional credibility."
-    }}
-    """
-
-    for attempt in range(len(_clients)):
-        client = _clients[_current_client_idx]
-        try:
-            response = client.models.generate_content(
-                model="gemini-2.0-flash",
-                contents=prompt,
-                config=genai_types.GenerateContentConfig(
-                    response_mime_type="application/json",
-                    temperature=0.1,
-                    max_output_tokens=1024,
-                ),
-            )
-            return json.loads(response.text)
-        except Exception as e:
-            error_msg = str(e).lower()
-            if "429" in error_msg or "quota" in error_msg or "exhausted" in error_msg:
-                print(f"[Gemini Quota] Final Score API Key #{_current_client_idx + 1} exhausted. Switching keys...")
-                _current_client_idx = (_current_client_idx + 1) % len(_clients)
-                continue
-            else:
-                print(f"[Gemini final score error] {e}")
-                return None
-    
-    print("[Gemini error] ALL API keys exhausted. Final score calculation failing over to fallback math.")
     return None

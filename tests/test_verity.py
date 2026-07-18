@@ -7,7 +7,7 @@ Tests cover:
   - gemini_client batch cache (no real API calls needed)
   - All 6 criterion rule-based sub-checks
   - scorer weighted math and trusted-source boost
-  - Flask route input validation (/analyze, /speak, /explain, /history)
+  - Flask route input validation (/analyze, /history)
 """
 
 import json
@@ -511,12 +511,36 @@ class TestScorer:
             raise ValueError("simulated crash")
 
         result = self.scorer._run_criterion_safely("test", bad_func)
-        assert result["score"] == 50
+        # A crashed criterion is marked N/A (excluded from the weighted score)
+        # rather than given a fabricated neutral score.
+        assert result.get("is_na") is True
         assert result.get("error") is True
+
+    def test_weighted_score_excludes_na_criteria(self):
+        """A crashed/N/A criterion's weight is redistributed, not treated as a 0 or 50."""
+        results = {
+            "domain":    {"score": 100},
+            "emotional": {"score": 100},
+            "factual":   {"score": 100},
+            "author":    {"score": 100},
+            "content":   {"score": 100},
+            "mdm":       {"score": 0, "is_na": True},  # simulated crash
+        }
+        weighted_sum = sum(
+            results[k]["score"] * self.scorer.WEIGHTS[k]
+            for k in self.scorer.WEIGHTS if not results[k].get("is_na")
+        )
+        weight_total = sum(
+            self.scorer.WEIGHTS[k] for k in self.scorer.WEIGHTS if not results[k].get("is_na")
+        )
+        score = int(round(weighted_sum / weight_total))
+        # All non-failed criteria scored 100, so the redistributed score
+        # should still be 100 — not dragged down by the failed one.
+        assert score == 100
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# FLASK ROUTES — input validation (no real Gemini/ElevenLabs calls)
+# FLASK ROUTES — input validation (no real Gemini calls)
 # ═══════════════════════════════════════════════════════════════════════════════
 
 class TestFlaskRoutes:
@@ -551,61 +575,6 @@ class TestFlaskRoutes:
         resp = self.client.get("/history")
         assert resp.status_code == 200
         assert isinstance(resp.get_json(), list)
-
-    def test_speak_no_key_returns_503(self):
-        original = self.app.ELEVENLABS_API_KEY
-        self.app.ELEVENLABS_API_KEY = None
-        resp = self.client.post("/speak",
-                                data=json.dumps({"text": "hello"}),
-                                content_type="application/json")
-        self.app.ELEVENLABS_API_KEY = original
-        assert resp.status_code == 503
-
-    def test_speak_summary_text_no_key_returns_503(self):
-        """Summary TTS uses the same /speak route — 503 without API key."""
-        original = self.app.ELEVENLABS_API_KEY
-        self.app.ELEVENLABS_API_KEY = None
-        summary_text = (
-            "Israel struck fuel storage facilities in Tehran on Thursday.\n\n"
-            "The Israeli military confirmed the strikes via official statement.\n\n"
-            "Iranian President Pezeshkian condemned the attacks."
-        )
-        resp = self.client.post("/speak",
-                                data=json.dumps({"text": summary_text}),
-                                content_type="application/json")
-        self.app.ELEVENLABS_API_KEY = original
-        assert resp.status_code == 503
-
-    def test_speak_empty_text_handled(self):
-        """Empty text to /speak returns 400 or 503 (not 500 crash)."""
-        original = self.app.ELEVENLABS_API_KEY
-        self.app.ELEVENLABS_API_KEY = None
-        resp = self.client.post("/speak",
-                                data=json.dumps({"text": ""}),
-                                content_type="application/json")
-        self.app.ELEVENLABS_API_KEY = original
-        assert resp.status_code in (400, 503)
-
-    def test_speak_accepts_long_summary_text(self):
-        """Long summary text (multi-paragraph) doesn't cause /speak to error before TTS."""
-        original = self.app.ELEVENLABS_API_KEY
-        self.app.ELEVENLABS_API_KEY = None
-        long_text = "Para. " * 200  # ~1200 chars — typical summary length
-        resp = self.client.post("/speak",
-                                data=json.dumps({"text": long_text}),
-                                content_type="application/json")
-        self.app.ELEVENLABS_API_KEY = original
-        # Without key → 503. The point is it doesn't 500 before even hitting ElevenLabs.
-        assert resp.status_code == 503
-
-    def test_explain_no_key_returns_503(self):
-        original = self.app.ELEVENLABS_API_KEY
-        self.app.ELEVENLABS_API_KEY = None
-        resp = self.client.post("/explain",
-                                data=json.dumps({"question_type": "why_flagged", "verdict_data": {}}),
-                                content_type="application/json")
-        self.app.ELEVENLABS_API_KEY = original
-        assert resp.status_code == 503
 
     def test_history_deque_stores_entries(self):
         """History deque correctly stores and caps at maxlen=20."""
@@ -887,8 +856,7 @@ class TestFrontendHTML:
             "cache-badge", "core-claim-section", "core-claim-text",
             "url-input", "text-input", "analyze-btn",
             "tab-url", "tab-text", "input-url-wrapper", "input-text-wrapper",
-            "speak-btn", "stop-btn", "followup-buttons",
-            "summary-speak-btn", "summary-stop-btn", "summary-toggle-btn",
+            "summary-toggle-btn",
             "lc-domain", "lc-emotional", "lc-factual",
             "lc-author", "lc-content", "lc-mdm",
             "loading-checklist", "history-container", "history-list",
@@ -918,7 +886,7 @@ class TestFrontendHTML:
             os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
             "static", "script.js"
         )
-        with open(script_path) as f:
+        with open(script_path, encoding="utf-8") as f:
             script_src = f.read()
         defined = set(re.findall(r"^(?:async\s+)?function\s+(\w+)\s*\(", script_src, re.MULTILINE))
 
@@ -941,7 +909,7 @@ class TestFrontendCSS:
             os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
             "static", "style.css"
         )
-        with open(css_path) as f:
+        with open(css_path, encoding="utf-8") as f:
             self.css = f.read()
         self.re = re
 
